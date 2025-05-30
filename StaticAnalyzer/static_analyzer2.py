@@ -1,26 +1,62 @@
 import lief
 import sys
-from capstone import Cs, CS_ARCH_RISCV, CS_MODE_RISCV32, CS_MODE_RISCV64, \
-    CS_GRP_JUMP, CS_GRP_CALL, CS_GRP_RET, CS_GRP_IRET, CS_OP_IMM, CS_OP_REG
-from capstone.riscv import RISCV_REG_X0, RISCV_OP_REG
+from capstone import Cs, CS_ARCH_RISCV, CS_MODE_RISCV32, CS_OP_IMM
+from basic_block import BasicBlock
 from typeguard import typechecked
 import capstone
+from capstone.riscv import RISCV_INS_BEQ, RISCV_INS_BNE, RISCV_INS_BLT, \
+    RISCV_INS_BGE, RISCV_INS_BLTU, RISCV_INS_BGEU, RISCV_INS_JAL, \
+    RISCV_INS_JALR
 
-header_file_type = 0
+GENERIC_ERROR_CODE: int = 1
+header_file_type: int = 0
+######## Binary related functions ########
+##########################################
 
-class BasicBlock:
-    def __init__(self, start_address):
-        self.start_address = start_address
-        self.instructions = []
-        self.end_address = start_address # Is updated with add_instrcution
-        self.successors = [] # List of (target_address, edge_type)
 
-    def add_instruction(self, insn):
-        self.instructions.append(insn)
-        self.end_address = insn.address + insn.size -1 # Inclusive end address
+@typechecked
+def read_elf(filepath: str) -> lief.ELF.Binary:
+    """
+    Reads elf file using lief library.
+    Halts script if it can not parse file.
+    """
+    binary = lief.parse(filepath)
+    if not binary:
+        print(f"Could not parse {filepath} as a supported executable format.")
+        sys.exit(GENERIC_ERROR_CODE)
+    return binary
 
-    def __repr__(self):
-        return f"BB @ 0x{self.start_address:x} (size: {len(self.instructions)} insns, ends @ 0x{self.end_address:x})"
+
+@typechecked
+def check_arch(binary: lief.ELF.Binary):
+    """
+    We are working only with RISC-V architecture
+    so it just halts if the provided ELF file
+    is something else.
+    """
+    if binary.header.machine_type != lief.ELF.ARCH.RISCV:
+        print(f"The provided file is not of RISCV architecture.")
+        sys.exit(GENERIC_ERROR_CODE)
+
+
+@typechecked
+def get_binary(filepath: str) -> lief.ELF.Binary:
+    """
+    It parses binary, checks for right architecture
+    and returns binary.
+    """
+    # parse the provided file with lief
+    binary: lief.ELF.Binary = read_elf(filepath)
+
+    # check for right architecture
+    check_arch(binary)
+
+    return binary
+
+
+######## Section related functions #######
+##########################################
+
 
 @typechecked
 def get_start_va(section: lief.ELF.Section) -> int:
@@ -33,25 +69,112 @@ def get_end_va(section: lief.ELF.Section) -> int:
 
 
 @typechecked
-def is_address_within_section(section: lief.ELF.Section, addr: int) -> bool:
-    start_va = get_start_va(section)
-    end_va = get_end_va(section)
-    # TODO
-    # Is end_va equal to the last instruction of section or does it point to 
-    # first instruction of next section?
-    # I think is the former but needs to be checked 
-    if start_va <= addr <= end_va:
+def is_offset_within_section(section: lief.ELF.Section, offset: int) -> bool:
+    if 0 <= offset <= section.size:
         return True
     else:
         return False
 
 
 @typechecked
+def is_function_within_section(section: lief.ELF.Section, symbol: lief.ELF.Symbol) -> bool:
+    """
+    There is no compare method for section object so
+    we are checking from two properties (name, va).
+    
+    Args:
+        section (lief.ELF.Section): The section object which is checked
+        symbol (lief.ELF.Symbol): The symbol object which is checked
+
+    Returns:
+        equal (bool): True if the symbol is within section
+
+    Raises:
+        /
+
+    Example:
+        >>> is_function_within_section(section, symbol)
+        True
+    """
+    section_1 = section
+    section_2: lief.ELF.Section = symbol.section
+    # 1. Check for names
+    # 2. Check for virtual address
+    if section_1.name == section_2.name and \
+        section_1.virtual_address == section_2.virtual_address:
+        return True
+    else:
+        return False
+
+
+@typechecked
+def extract_function_symbols_from_section(binary: lief.ELF.Binary ,section: lief.ELF.Section) -> list[lief.ELF.Symbol]:
+    """
+    Find all elf function symbols of section.
+
+    Args:
+        binary (lief.ELF.Binary): Binary object of the file
+        section (lief.ELF.Section): Section object
+
+    Returns:
+         function_symbols (list[lief.ELF.Symbol]): all function symbols within function
+
+    Raises:
+        /
+
+    Example:
+        >>> extract_function_symbols_from_section(binary, section)
+        [main, func1, ...]
+    """
+    # get all function symbols and filter them if they are not
+    # functions or they are not within provided section
+    function_symbols: list[lief.ELF.Symbol]  = [s for s in binary.symbols \
+                         if s.is_function and is_function_within_section(section, s)]
+    
+    # Sort symbols by address 
+    function_symbols = sorted(function_symbols, key=lambda s: s.value)
+
+    
+    # If function symbols is empty
+    if not function_symbols:
+        print("No function symbols found within section.")
+        sys.exit(1)
+    
+    return function_symbols
+
+
+######## Function related functions ######
+##########################################
+
+
+@typechecked
 def is_a_function(symbol: lief.ELF.Symbol) -> bool:
+    """
+    Checks if symbol is a function.
+    """
     if(symbol.is_function):
         return True
     else:
         return False
+
+
+@typechecked
+def get_function_size(symbol: lief.ELF.Symbol) -> int:
+    """
+    Checks if symbol is a function and returns size of it.
+    """
+    # Check if symbol is a function
+    if not is_a_function(symbol):
+        print(f"The function {symbol.name} is not a function!")
+        return -1
+    size = symbol.size
+    if size <= 0:
+        print(f"The function {symbol.name} has size of 0 or lower!")
+        # TODO 
+        # If this ever happens one should check why this occurs
+        # understand problem and provide other solution
+        # It should not happen
+    return size
 
 
 @typechecked
@@ -98,63 +221,6 @@ def get_function_start_address(symbol: lief.ELF.Symbol) -> int:
 
 
 @typechecked
-def get_function_size(symbol: lief.ELF.Symbol) -> int:
-    # Check if symbol is a function
-    if not is_a_function(symbol):
-        print(f"The function {symbol.name} is not a function!")
-        return -1
-    size = symbol.size
-    if size <= 0:
-        print(f"The function {symbol.name} has size of 0 or lower!")
-        # TODO 
-        # If this ever happens one should check why this occurs
-        # understand problem and provide other solution
-        # It should not happen
-    return size
-
-
-@typechecked
-def is_function_within_section(section: lief.ELF.Section, symbol: lief.ELF.Symbol) -> bool:
-    if not is_a_function(symbol):
-        print(f"Not a function!")
-        return False
-    
-
-@typechecked
-def is_offset_within_section(section: lief.ELF.Section, offset: int) -> bool:
-    if 0 <= offset <= section.size:
-        return True
-    else:
-        return False
-
-
-@typechecked
-def is_function_within_section(section: lief.ELF.Section, symbol: lief.ELF.Symbol) -> bool:
-    """
-    Remember this is morally wrong way of checking!
-    Will do better next time. Or this time if it will pose problems.
-    
-    Args:
-        section (lief.ELF.Section): The section object which is checked
-        symbol (lief.ELF.Symbol): The symbol object which is checked
-
-    Returns:
-        equal (bool): True if the symbol is within section
-
-    Raises:
-        /
-
-    Example:
-        >>> is_function_within_section(section, symbol)
-        True
-    """
-    if section.name == symbol.section.name:
-        return True
-    else:
-        return False
-
-
-@typechecked
 def get_function_offsets(symbol: lief.ELF.Symbol) -> tuple[int, int]:
     """
     It uses value property of Symbol object to determine offset
@@ -198,10 +264,10 @@ def get_function_offsets(symbol: lief.ELF.Symbol) -> tuple[int, int]:
     
     end_offset = start_offset + get_function_size(symbol)
     return start_offset, end_offset
-    
+
 
 @typechecked
-def get_function_code_slice(section: lief.ELF.Section, symbol: lief.ELF.Symbol) -> bytes:
+def get_function_code_slice(symbol: lief.ELF.Symbol) -> bytes:
     """Returns the code bytes for a function.
     
     Args:
@@ -219,16 +285,9 @@ def get_function_code_slice(section: lief.ELF.Section, symbol: lief.ELF.Symbol) 
         b'\x13\x01\...'
     """
 
-    section_start_va: int = get_start_va(section)           # get section's start address
-    section_end_va: int = get_end_va(section)               # get section's end address
-    section_raw_content: bytes = bytes(section.content)     # get memoryview of section -> it should be direct bytes 
-
-    # Ensure the function symbol is within the provided section
-    if not is_function_within_section(section, symbol):
-        print(f"Warning: Function {symbol.name} (0x{get_function_start_address(symbol):x})\
-               seems outside .text (0x{section_start_va:x} - 0x{section_end_va:x}). Skipping.")
-        sys.exit(1)
-
+    # Get section from symbol
+    section: lief.ELF.Section = symbol.section
+    
     # Obtain function offsets
     start_offset: int 
     end_offset: int
@@ -238,229 +297,180 @@ def get_function_code_slice(section: lief.ELF.Section, symbol: lief.ELF.Symbol) 
     if not is_offset_within_section(section, start_offset) or end_offset <= start_offset \
         or not is_offset_within_section(section, end_offset):
         print(f"Warning: Invalid offsets for function {symbol.name}. Skipping.")
-        sys.exit(1)
+        return bytes()
 
-    return section_raw_content[start_offset:end_offset]
+    return bytes(section.content)[start_offset:end_offset]
+
+
+######## Basic block related functions ###
+##########################################
+
 
 @typechecked
-def identify_leaders(instructions: list[capstone.CsInsn]):
-    # 1. Identify Leaders
-    leaders: set = {instructions[0].address} # First instruction is a leader
-    for i, insn in enumerate(instructions): # Enumerate through instructions
-        # Target of a jump or call is a leader
-        if insn.groups and (CS_GRP_JUMP in insn.groups or CS_GRP_CALL in insn.groups):
-            for op in insn.operands:
-                if op.type == CS_OP_IMM: # Direct jump/call target
-                    target_addr = op.value.imm
-                    # Check if target is within the function's disassembled range
-                    if any(prev_insn.address == target_addr for prev_insn in instructions):
-                         leaders.add(target_addr)
+def identify_leaders(instructions: list[capstone.CsInsn]) -> list[int]:
+    """
+    So identification of leaders goes as following. First insn
+    is a leader. Then leaders are also after branch or jump instruction
+    and if we can determine where the instruction will jump and that insn
+    is within the function we consider also that insn as a leader.
+    # TODO
+    Calls out of functions should be handled
+    """
+    # First insn is a leader
+    leaders: set = {instructions[0].address}
 
-        # Instruction following a jump, call, or ret is a leader (if it exists)
-        # CS_GRP_IRET is actually for interrupt return
-        # If we do that we should do also CS_GRP_INT which is interrupt call
-        if insn.groups and (CS_GRP_JUMP in insn.groups or CS_GRP_CALL in insn.groups or CS_GRP_RET in insn.groups or CS_GRP_IRET in insn.groups):
+    for i, insn in enumerate(instructions):
+        # Check if instrcution changes control flow
+        cf_insn: bool = is_control_flow_insn(insn)
+        if cf_insn:
+            # Next instruction is a leader
             if i + 1 < len(instructions):
                 leaders.add(instructions[i+1].address)
+            
+            # Try to determine destination address
+            dst_addr: int = get_dst_addr(insn)
+            if dst_addr != -1:
+                # We need to check if the address is within function
+                if instructions[0].address <= dst_addr <= instructions[-1].addr:
+                    leaders.add(dst_addr)
+                else:
+                    # TODO
+                    # This should be handled
+                    pass
+
     
-    # sort leaders (by address)
-    sorted_leaders = sorted(list(leaders))
+    # Sort leaders
+    sorted_leaders: list[int] = sorted(list(leaders))
     return sorted_leaders
 
 
-def form_basic_blocks(instructions, sorted_leaders):
-    # 2. Form Basic Blocks
-    # This dictionary is created in a way that the key
-    # is actually an address where BB lies.
-    basic_blocks = {} 
+@typechecked
+def form_basic_blocks(instructions: list[capstone.CsInsn], sorted_leaders: list[int]) -> dict[int, BasicBlock]:
+    """
+    From the instructions of a function and its leaders
+    it constructs basic block of a function.
+    Loop through instructions and when new leader appears
+    create new basic block.
+    """
+    
+    basic_blocks: dict[int, BasicBlock] = {} 
     current_bb = None
     leader_idx = 0
 
     # Go through instructions of function
     for insn in instructions:
-
         # Create new basic block
         if leader_idx < len(sorted_leaders) and insn.address == sorted_leaders[leader_idx]:
             current_bb = BasicBlock(insn.address)
             basic_blocks[insn.address] = current_bb
             leader_idx += 1
         
-        # Add instructions to current basic block
-        if current_bb: # Should always be true after the first leader
-            current_bb.add_instruction(insn)
-
-            # If this instruction is a control transfer or the next one is a leader
-            is_control_transfer = insn.groups and (CS_GRP_JUMP in insn.groups or CS_GRP_CALL in insn.groups or CS_GRP_RET in insn.groups or CS_GRP_IRET in insn.groups)
-            next_is_leader = (leader_idx < len(sorted_leaders) and insn.address + insn.size == sorted_leaders[leader_idx])
-            
-            if is_control_transfer or next_is_leader:
-                if is_control_transfer and (insn.address + insn.size) in basic_blocks and (insn.address + insn.size) not in sorted_leaders:
-                    # This case can happen if a block ends with a control flow,
-                    # and the next instruction wasn't explicitly marked as a leader,
-                    # but should be (e.g. fall-through of a conditional jump).
-                    # This ensures the next sequential instruction starts a new block if it's not already a leader.
-                    # A more robust leader identification would handle this better.
-                    # For now, we assume leaders are correctly identified.
-                    pass # This situation implies the next block starts at sorted_leaders[leader_idx]
+        # Add instruction to bb
+        current_bb.add_instruction(insn)
     
     return basic_blocks
 
 
-def identify_edges(basic_blocks):
-    # 3. Identify Edges
-    # Here we are assuming that key of BB is start address
-    adj = {bb_addr: [] for bb_addr in basic_blocks} # Adjacency list: {from_bb_addr: [(to_bb_addr, type), ...]}
+@typechecked
+def create_adjacency_list(basic_block: BasicBlock) -> list[tuple[int, str]]:
+    """
+    Gets basic block and then it creates
+    adjacency list for that bb.
+    """
+    adj: list[tuple[int, str]] = []
 
-    # Go through all basic blocks of function
-    for bb_addr, bb in basic_blocks.items():
+    # get last instruction
+    last_insn = basic_block.instructions[-1]
+    next_insn_addr = last_insn.address + last_insn.size
 
-        # if BB is empty
-        if not bb.instructions:
-            continue
-        
-        # get last instruction
-        last_insn = bb.instructions[-1]
-        # next_insn_addr is actually first address of next BB
-        # if there exists at this address (maybe can be return statement)
-        next_insn_addr = last_insn.address + last_insn.size
+    if last_insn.id == {
+        RISCV_INS_BEQ, RISCV_INS_BNE, RISCV_INS_BLT,
+        RISCV_INS_BGE, RISCV_INS_BLTU, RISCV_INS_BGEU
+    }:
+        # Condition not positive
+        adj.append((next_insn_addr, "Condition not taken."))
+        # Condition positive
+        adj.append((get_dst_addr(last_insn), "Condition taken."))
+    elif last_insn.id == RISCV_INS_JAL:
+        # Unconditional jump
+        adj.append((get_dst_addr(last_insn), "Unconditional jump."))
+    elif last_insn.id == RISCV_INS_JALR:
+        # Indirect jump
+        adj.append((-1, "Indirect jump."))
 
-        is_unconditional_jump = False
-        # last_insn.groups just checks if the capstone detail is enabled
-        is_ret_or_iret = last_insn.groups and (CS_GRP_RET in last_insn.groups or CS_GRP_IRET in last_insn.groups)
-
-        #CS_GRP_JUMP    = 1  # all jump instructions (conditional+direct+indirect jumps)
-        if last_insn.groups and CS_GRP_JUMP in last_insn.groups:
-            # Check if it's unconditional (e.g. jmp vs jz)
-            # Capstone doesn't directly give "unconditional" for all jump types,
-            # so we check common unconditional jump mnemonics.
-            # More robustly, one would check instruction semantics.
-            if last_insn.mnemonic == 'jal':
-                # Check if the first operand (destination register rd) is x0
-                if len(last_insn.operands) > 0 and \
-                   last_insn.operands[0].type == CS_OP_REG and \
-                   last_insn.operands[0].reg == RISCV_REG_X0:
-                    is_unconditional_jump = True
-
-            target_op = None
-            for op in last_insn.operands:
-                if op.type == CS_OP_IMM:
-                    target_op = op.value.imm
-                    break
-            
-            if target_op is not None and target_op in basic_blocks:
-                adj[bb_addr].append((target_op, "jump_cond_taken" if not is_unconditional_jump else "jump_uncond"))
-            elif target_op is not None:
-                 adj[bb_addr].append((target_op, "jump_external_or_unresolved")) # Target outside current blocks
-
-            # If it's a conditional jump, there's also a fall-through path
-            if not is_unconditional_jump and not is_ret_or_iret and next_insn_addr in basic_blocks:
-                adj[bb_addr].append((next_insn_addr, "fallthrough_cond_nottaken"))
-
-        if last_insn.groups and CS_GRP_CALL in last_insn.groups:
-            call_target = None
-            for op in last_insn.operands:
-                if op.type == CS_OP_IMM:
-                    call_target = op.value.imm
-                    break
-            
-            if call_target is not None:
-                # For CFG, the "return site" is the primary successor within the function
-                if next_insn_addr in basic_blocks:
-                     adj[bb_addr].append((next_insn_addr, f"call_ret_site (to 0x{call_target:x})"))
-                else: # Call at end of function block without subsequent instructions in this function
-                     adj[bb_addr].append((None, f"call_ret_site_external (to 0x{call_target:x})")) # No next block in func
-            else: # Indirect call
-                if next_insn_addr in basic_blocks:
-                    adj[bb_addr].append((next_insn_addr, "call_indirect_ret_site"))
-                else:
-                    adj[bb_addr].append((None, "call_indirect_ret_site_external"))
-
-
-        # Fall-through for non-terminating, non-unconditional jump, non-call instructions
-        if not is_unconditional_jump and not is_ret_or_iret and not (last_insn.groups and CS_GRP_CALL in last_insn.groups):
-            if next_insn_addr in basic_blocks: # Next instruction starts a new BB
-                # Avoid duplicate fallthrough if already added by conditional jump logic
-                if not any(succ[0] == next_insn_addr and succ[1] == "fallthrough_cond_nottaken" for succ in adj[bb_addr]):
-                    adj[bb_addr].append((next_insn_addr, "fallthrough_sequential"))
     return adj
 
 
 @typechecked
-def build_cfg_for_function(disassembler: capstone.Cs, func_code_bytes: bytes, func_base_address: int):
-    if not func_code_bytes:
-        return {}, {}
+def create_adjacency_dict(basic_blocks: dict[int, BasicBlock]) -> dict[int, list[tuple[int, str]]]:
+    """
+    It accepts dictionary of basic blocks
+    and then it creates adjacency list for
+    every basic block in dict.
+    """
+    # Adjacency list: {from_bb_addr: [(to_bb_addr, type), ...]}
+    adj: dict[int, list[tuple[int, str]]] = {bb_addr: [] for bb_addr in basic_blocks} 
 
-    instructions: list[capstone.CsInsn] = list(disassembler.disasm(func_code_bytes, func_base_address))
-    if not instructions:
-        return {}, {}
+    # Go through all basic blocks of function
+    for bb_addr, bb in basic_blocks.items():
+        adj[bb_addr] = create_adjacency_list(bb)
+        
+    return adj
 
-    sorted_leaders = identify_leaders(instructions)
+
+@typechecked
+def assign_adj_to_bb(basic_blocks: dict[int, BasicBlock],\
+                      adj: dict[int, list[tuple[int, str]]]) -> None:
+    """
+    It assigns adjacency list to each BB object.
+    """
+    for bb_addr, bb in basic_blocks.items():
+        bb.successors = adj[bb_addr]
+
+
+@typechecked
+def extract_cfg_of_function(symbol: lief.ELF.Symbol)\
+      -> tuple[dict[int, BasicBlock], dict[int, list[tuple[int, str]]]]:
+    """
+    It extracts basic blocks and adjacency list
+    between them. It could be thought as cfg.
+    """
+    # Get raw bytes of function
+    func_bytes: bytes = get_function_code_slice(symbol)
+
+    # Dissassemble them
+    instructions: list[capstone.CsInsn] = \
+        disassemble_code(func_bytes, get_function_start_address(symbol))
     
-    basic_blocks = form_basic_blocks(instructions, sorted_leaders)
+    # Find leaders
+    sorted_leaders: list[int] = identify_leaders(instructions)
 
-    adj = identify_edges(basic_blocks)
-    
+    # Construct basic blocks
+    basic_blocks: dict[int, BasicBlock] = form_basic_blocks(instructions, sorted_leaders)
+
+    # Create adjacency list
+    adj: dict[int, list[tuple[int, str]]] = create_adjacency_dict(basic_blocks)
+
+    # Assign adjacency list to basic blocks
+    assign_adj_to_bb(basic_blocks, adj)
+
     return basic_blocks, adj
 
 
-def parse_file(filepath):
-    binary = lief.parse(filepath)
-    if not binary:
-        print(f"Could not parse {filepath} as a supported executable format.")
-        sys.exit(1)
-    return binary
-
-
-def check_arch(machine_type):
-    if machine_type != lief.ELF.ARCH.RISCV:
-        print(f"The provided file is not of RISCV architecture.")
-        sys.exit(1)
-
 @typechecked
-def extract_function_symbols(binary: lief.ELF.Binary) -> list[lief.ELF.Symbol]:
-    text_section: lief.ELF.Section = binary.get_section(".text")
-    if not text_section:
-        print("'.text' section not found. Cannot proceed.")
-        sys.exit(1)
+def extract_all_cfgs(function_symbols: list[lief.ELF.Symbol]):
+    """
+    TODO
+    """
 
-    # Sort symbols by address to help determine function boundaries
-    # Filter for function symbols and ensure they have a valid address
-    function_symbols = sorted(
-        [s for s in binary.symbols if s.is_function and s.value >= 0],
-        key=lambda s: s.value
-    )
-    
-    # If function symbols is empty
-    if not function_symbols:
-        print("No function symbols found.")
-        sys.exit(1)
-    
-    return function_symbols
-
-@typechecked
-def extract_all_cfgs(binary: lief.ELF.Binary, function_symbols: list[lief.ELF.Symbol]):
-    # initialize capstone
-    md: capstone.Cs  = Cs(CS_ARCH_RISCV, CS_MODE_RISCV32)
-    md.detail = True  # Enable instruction details (groups, operands)
-    text_section: lief.ELF.Section = binary.get_section(".text")
-    all_cfgs = {}
+    # Loop through function symbols
     for i, func_sym in enumerate(function_symbols):
         print(f"\n--- Analyzing Function: {func_sym.name} @ 0x{func_sym.value:x} ---")
-        
-        func_code_bytes: bytes = get_function_code_slice(text_section, func_sym)
-
-        func_size: int = get_function_size(func_sym)
-        func_start_va: int = get_function_start_address(func_sym)
-
-        # Check if we got any bytes
-        if not func_code_bytes or func_size == 0:
-            print(f"Could not get code for function {func_sym.name} or size is zero. Skipping.")
-            continue
-        
-        print(f"Attempting to disassemble 0x{func_size:x} bytes from 0x{func_start_va:x}")
-
-        basic_blocks, adj = build_cfg_for_function(md, func_code_bytes, func_start_va)
-        all_cfgs[func_sym.name] = (basic_blocks, adj)
+        print(f"Attempting to disassemble 0x{get_function_size(func_sym):x}\
+               bytes from 0x{get_function_start_address(func_sym):x}")
+        basic_blocks: dict[int, BasicBlock]
+        adj: dict[int, list[tuple[int, str]]]
+        basic_blocks, adj = extract_cfg_of_function(func_sym)
 
         if not basic_blocks:
             print("No basic blocks generated for this function.")
@@ -469,39 +479,133 @@ def extract_all_cfgs(binary: lief.ELF.Binary, function_symbols: list[lief.ELF.Sy
         print("Basic Blocks:")
         for bb_addr, bb in sorted(basic_blocks.items()):
             print(f"  {bb}")
-            # for insn_idx, insn in enumerate(bb.instructions):
-            #     print(f"    0x{insn.address:x}:\t{insn.mnemonic}\t{insn.op_str}")
-            # print(f"    Successors: {adj.get(bb_addr, [])}")
-        
-        print("Edges (Adjacency List):")
-        for from_bb, to_bbs in sorted(adj.items()):
-            if basic_blocks.get(from_bb): # Check if from_bb exists (it should)
-                 print(f"  From BB @ 0x{from_bb:x}:")
-                 for to_bb_addr, edge_type in to_bbs:
-                     to_bb_str = f"BB @ 0x{to_bb_addr:x}" if to_bb_addr is not None and to_bb_addr in basic_blocks else f"External/Unresolved @ 0x{to_bb_addr:x}" if to_bb_addr is not None else "External/Return"
-                     print(f"    -> {to_bb_str} ({edge_type})")
-            else:
-                print(f"  Warning: Edge from non-existent BB @ 0x{from_bb:x}")
+            for insn_idx, insn in enumerate(bb.instructions):
+                print(f"    0x{insn.address:x}:\t{insn.mnemonic}\t{insn.op_str}")
+            print(f"    Successors: {adj.get(bb_addr, [])}")
+
+        print_adj(adj)
+
+
+######## Print related functions #########
+##########################################
+
 
 @typechecked
-def main(filepath: str):
-    # parse the provided file with lief
-    binary: lief.ELF.Binary = parse_file(filepath)
-    global header_file_type 
+def print_adj(adj: dict[int, list[tuple[int, str]]]) -> None:
+    print("Edges (Adjacency List):")
+    for from_bb, to_bbs in sorted(adj.items()):
+        print(f"  From BB @ 0x{from_bb:x}:")
+        for to_bb_addr, edge_type in to_bbs:
+            to_bb_str = f"BB @ 0x{to_bb_addr:x}"
+            print(f"    -> {to_bb_str} ({edge_type})")
+
+
+######## Capstone related functions ######
+##########################################
+
+
+@typechecked
+def is_dst_addr_staticaly_determined(insn: capstone.CsInsn) -> bool:
+    """
+    Gets the instruction and provides info if the 
+    instruction's destination address can be statically
+    determined.
+
+    Returns True for:
+    - Direct jumps (JAL with constant target)
+    - Conditional branches (BEQ/BNE/etc with constant offset)
+    Returns False for:
+    - Indirect jumps (JALR)
+    - Non-control-flow instructions
+    """
+    # Check for direct jumps and branches
+    if insn.id in {
+        RISCV_INS_BEQ, RISCV_INS_BNE, RISCV_INS_BLT,
+        RISCV_INS_BGE, RISCV_INS_BLTU, RISCV_INS_BGEU,
+        RISCV_INS_JAL
+    }:
+        return True
+    else:
+        return False
+
+
+@typechecked
+def get_dst_addr(insn: capstone.CsInsn) -> int:
+    """
+    Returns the destination address if it can be statically determined.
+    Returns -1 for:
+    - Indirect jumps (JALR)
+    - Non-control-flow instructions
+    - Instructions without static targets
+    """
+    # Check for right insn
+    if not is_dst_addr_staticaly_determined(insn):
+        return -1
+    elif insn.operands and len(insn.operands) > 0:
+        op = insn.operands[-1]  # Last operand is typically the target
+        if op.type == CS_OP_IMM:
+            return insn.address + op.value.imm
+    else:
+        # 
+        return -1
+
+
+@typechecked
+def is_control_flow_insn(insn: capstone.CsInsn):
+    """
+    Returns True is the provided instruction
+    changes control flow. 
+    We have not covered Compressed instructions
+    and exception returns.
+    """
+    CONTROL_FLOW_INSTRUCTIONS = {
+        RISCV_INS_BEQ, RISCV_INS_BNE, RISCV_INS_BLT,
+        RISCV_INS_BGE, RISCV_INS_BLTU, RISCV_INS_BGEU,
+        RISCV_INS_JAL, RISCV_INS_JALR
+    }
+    return insn.id in CONTROL_FLOW_INSTRUCTIONS
+
+
+@typechecked
+def disassemble_code(code: bytes, base_addr: int) -> list[capstone.CsInsn]:
+    """
+    Accepts raw bytes of function and its base address
+    then dissassembles it.
+    """
+    md: capstone.Cs = Cs(CS_ARCH_RISCV, CS_MODE_RISCV32)
+    md.detail = True
+    return list(md.disasm(code, base_addr))
+
+
+######## Main functions ##################
+##########################################
+
+
+@typechecked
+def setup_env(binary: lief.ELF.Binary) -> None:
+    """
+    Sets up global variables. Just one for now
+    header_file_type.
+    """
+    global header_file_type
     header_file_type = binary.header.file_type
 
-    # check for right architecture
-    check_arch(binary.header.machine_type)
 
-    # Now it is not actually clear how to approach a problem of finding CFG
-    # One suggests to extract functions from symbol table and then perform
-    # CFG for each function. Maybe we could do that. 
+@typechecked
+def analyze_elf(filepath: str, all_functions: bool = True, section_name: str = ".text"):
+    # Get binary
+    binary: lief.ELF.Binary = get_binary(filepath)
 
-    # First extract function symbols
-    function_symbols: list[lief.ELF.Symbol] = extract_function_symbols(binary)
+    # Set up some global variables
+    setup_env(binary)
+
+    # Find relevant function symbols
+    function_symbols: list[lief.ELF.Symbol] = \
+        extract_function_symbols_from_section(binary, binary.get_section(".text"))
 
     # With binary and function symbols get all cfgs
-    all_cfgs = extract_all_cfgs(binary, function_symbols)
+    all_cfgs = extract_all_cfgs(function_symbols)
+    return all_cfgs
 
 
 
@@ -510,4 +614,11 @@ if __name__ == "__main__":
         print(f"Usage: python {sys.argv[0]} <object_file_path>")
         sys.exit(1)
     filepath = sys.argv[1]
-    main(filepath)
+    analyze_elf(filepath)
+
+# TODO
+# Detecting loops should be done in the following way:
+# ince subroutine
+# calls use instructions that update the link-register, we con-
+# sider the target of each non-linking backwards branch as
+# a loop entry node. 

@@ -7,9 +7,13 @@ import capstone
 from capstone.riscv import RISCV_INS_BEQ, RISCV_INS_BNE, RISCV_INS_BLT, \
     RISCV_INS_BGE, RISCV_INS_BLTU, RISCV_INS_BGEU, RISCV_INS_JAL, \
     RISCV_INS_JALR
+import argparse
 
 GENERIC_ERROR_CODE: int = 1
 header_file_type: int = 0
+functions_to_analyze: list[str] = []
+functions_to_analyze.append("main")
+args = None
 ######## Binary related functions ########
 ##########################################
 
@@ -316,6 +320,9 @@ def identify_leaders(instructions: list[capstone.CsInsn]) -> list[int]:
     # TODO
     Calls out of functions should be handled
     """
+    if instructions is None:
+        return None
+
     # First insn is a leader
     leaders: set = {instructions[0].address}
 
@@ -331,7 +338,7 @@ def identify_leaders(instructions: list[capstone.CsInsn]) -> list[int]:
             dst_addr: int = get_dst_addr(insn)
             if dst_addr != -1:
                 # We need to check if the address is within function
-                if instructions[0].address <= dst_addr <= instructions[-1].addr:
+                if instructions[0].address <= dst_addr <= instructions[-1].address:
                     leaders.add(dst_addr)
                 else:
                     # TODO
@@ -438,6 +445,9 @@ def extract_cfg_of_function(symbol: lief.ELF.Symbol)\
     # Get raw bytes of function
     func_bytes: bytes = get_function_code_slice(symbol)
 
+    if len(func_bytes) == 0:
+        return dict(), dict()
+
     # Dissassemble them
     instructions: list[capstone.CsInsn] = \
         disassemble_code(func_bytes, get_function_start_address(symbol))
@@ -473,6 +483,9 @@ def extract_all_cfgs(function_symbols: list[lief.ELF.Symbol]):
         basic_blocks, adj = extract_cfg_of_function(func_sym)
 
         if not basic_blocks:
+            continue
+
+        if not basic_blocks:
             print("No basic blocks generated for this function.")
             continue
 
@@ -492,6 +505,9 @@ def extract_all_cfgs(function_symbols: list[lief.ELF.Symbol]):
 
 @typechecked
 def print_adj(adj: dict[int, list[tuple[int, str]]]) -> None:
+    """
+    TODO
+    """
     print("Edges (Adjacency List):")
     for from_bb, to_bbs in sorted(adj.items()):
         print(f"  From BB @ 0x{from_bb:x}:")
@@ -592,6 +608,23 @@ def setup_env(binary: lief.ELF.Binary) -> None:
 
 
 @typechecked
+def filter_function_symbols(function_symbols: list[lief.ELF.Symbol]) -> list[lief.ELF.Symbol]:
+    """
+    Gets the function symbols list which is then compared
+    to global functions_to_analyze list (this should be set in advance)
+    and removes all function symbols that are not present
+    in global variable.
+    """
+    new_function_symbols: list[lief.ELF.Symbol] = []
+    global functions_to_analyze
+    for func_sym in function_symbols:
+        if func_sym.name in functions_to_analyze:
+            new_function_symbols.append(func_sym)
+    
+    return new_function_symbols
+
+
+@typechecked
 def analyze_elf(filepath: str, all_functions: bool = True, section_name: str = ".text"):
     # Get binary
     binary: lief.ELF.Binary = get_binary(filepath)
@@ -603,22 +636,54 @@ def analyze_elf(filepath: str, all_functions: bool = True, section_name: str = "
     function_symbols: list[lief.ELF.Symbol] = \
         extract_function_symbols_from_section(binary, binary.get_section(".text"))
 
+    # Filter those function symbols to our needs
+    function_symbols = filter_function_symbols(function_symbols)
+
     # With binary and function symbols get all cfgs
     all_cfgs = extract_all_cfgs(function_symbols)
     return all_cfgs
 
 
+@typechecked
+def parse_input():
+    """
+    TODO
+    """
+    # global args
+    global functions_to_analyze
+    parser = argparse.ArgumentParser(description="TODO")
+    # Positional arguments
+    parser.add_argument('filepath', type=str, help="Path to the ELF file")
+    # Optional arguments
+    parser.add_argument('--functions', '-f', type=str, help='Comma-separated list of functions names')
+    args = parser.parse_args()
+    if args.functions:
+        for fun in args.functions.split(','):
+            functions_to_analyze.append(fun)
+    return args.filepath
+
+
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print(f"Usage: python {sys.argv[0]} <object_file_path>")
-        sys.exit(1)
-    filepath = sys.argv[1]
+    filepath = parse_input()
     analyze_elf(filepath)
 
 # TODO
+# 1.
 # Detecting loops should be done in the following way:
-# ince subroutine
+# since subroutine
 # calls use instructions that update the link-register, we con-
 # sider the target of each non-linking backwards branch as
 # a loop entry node. 
+
+"""
+2.
+For now jalr instruction is considered that it can not be determined.
+However there are cases where one can recognize compiler patterns
+e.g. auipc t1, offset + jalr ra, t1, offset which can be decoded 
+statically. 
+"""
+"""
+3. Pseudo instruction "ret" could probably be determined statically.
+
+"""

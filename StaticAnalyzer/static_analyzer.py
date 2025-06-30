@@ -8,54 +8,14 @@ from capstone.riscv import RISCV_INS_BEQ, RISCV_INS_BNE, RISCV_INS_BLT, \
     RISCV_INS_BGE, RISCV_INS_BLTU, RISCV_INS_BGEU, RISCV_INS_JAL, \
     RISCV_INS_JALR
 import argparse
+from control_flow_type import ControlFlowType
+import file_functions
 
 GENERIC_ERROR_CODE: int = 1
 header_file_type: int = 0
 functions_to_analyze: list[str] = []
 functions_to_analyze.append("main")
 args = None
-######## Binary related functions ########
-##########################################
-
-
-@typechecked
-def read_elf(filepath: str) -> lief.ELF.Binary:
-    """
-    Reads elf file using lief library.
-    Halts script if it can not parse file.
-    """
-    binary = lief.parse(filepath)
-    if not binary:
-        print(f"Could not parse {filepath} as a supported executable format.")
-        sys.exit(GENERIC_ERROR_CODE)
-    return binary
-
-
-@typechecked
-def check_arch(binary: lief.ELF.Binary):
-    """
-    We are working only with RISC-V architecture
-    so it just halts if the provided ELF file
-    is something else.
-    """
-    if binary.header.machine_type != lief.ELF.ARCH.RISCV:
-        print(f"The provided file is not of RISCV architecture.")
-        sys.exit(GENERIC_ERROR_CODE)
-
-
-@typechecked
-def get_binary(filepath: str) -> lief.ELF.Binary:
-    """
-    It parses binary, checks for right architecture
-    and returns binary.
-    """
-    # parse the provided file with lief
-    binary: lief.ELF.Binary = read_elf(filepath)
-
-    # check for right architecture
-    check_arch(binary)
-
-    return binary
 
 
 ######## Section related functions #######
@@ -379,7 +339,8 @@ def form_basic_blocks(instructions: list[capstone.CsInsn], sorted_leaders: list[
 
 
 @typechecked
-def create_adjacency_list(basic_block: BasicBlock) -> list[tuple[int, str]]:
+def create_adjacency_list(basic_block: BasicBlock) -> \
+    tuple[list[tuple[int, str]], ControlFlowType]:
     """
     Gets basic block and then it creates
     adjacency list for that bb.
@@ -387,10 +348,12 @@ def create_adjacency_list(basic_block: BasicBlock) -> list[tuple[int, str]]:
     adj: list[tuple[int, str]] = []
 
     # get last instruction
-    last_insn = basic_block.instructions[-1]
+    last_insn: capstone.CsInsn = basic_block.instructions[-1]
     next_insn_addr = last_insn.address + last_insn.size
 
-    if last_insn.id == {
+    cft: ControlFlowType = ControlFlowType(last_insn.id)
+
+    if last_insn.id in {
         RISCV_INS_BEQ, RISCV_INS_BNE, RISCV_INS_BLT,
         RISCV_INS_BGE, RISCV_INS_BLTU, RISCV_INS_BGEU
     }:
@@ -398,14 +361,25 @@ def create_adjacency_list(basic_block: BasicBlock) -> list[tuple[int, str]]:
         adj.append((next_insn_addr, "Condition not taken."))
         # Condition positive
         adj.append((get_dst_addr(last_insn), "Condition taken."))
+        # CFT
+        cft.set_condition_taken_addr(get_dst_addr(last_insn), "Condition taken.")
+        cft.set_condition_not_taken_addr(next_insn_addr, "Condition not taken.")
     elif last_insn.id == RISCV_INS_JAL:
         # Unconditional jump
         adj.append((get_dst_addr(last_insn), "Unconditional jump."))
+        # CFT
+        cft.set_destination_addr(get_dst_addr(last_insn), "Unconditional jump.")
     elif last_insn.id == RISCV_INS_JALR:
         # Indirect jump
         adj.append((-1, "Indirect jump."))
+        cft.set_destination_addr(-1, "Unconditional jump.")
+    else:
+        # There is no condition and the flow just goes to the next 
+        # instruction
+        adj.append((next_insn_addr, "Next instruction."))
+        cft.set_destination_addr(next_insn_addr, "Next instruction.")
 
-    return adj
+    return adj, cft
 
 
 @typechecked
@@ -420,7 +394,11 @@ def create_adjacency_dict(basic_blocks: dict[int, BasicBlock]) -> dict[int, list
 
     # Go through all basic blocks of function
     for bb_addr, bb in basic_blocks.items():
-        adj[bb_addr] = create_adjacency_list(bb)
+        adj_tmp: list[tuple[int, str]]
+        cft: ControlFlowType
+        adj_tmp, cft = create_adjacency_list(bb)
+        adj[bb_addr] = adj_tmp
+        bb.cft = cft
         
     return adj
 
@@ -468,10 +446,14 @@ def extract_cfg_of_function(symbol: lief.ELF.Symbol)\
 
 
 @typechecked
-def extract_all_cfgs(function_symbols: list[lief.ELF.Symbol]):
+def extract_all_cfgs(function_symbols: list[lief.ELF.Symbol]) -> dict[str, dict[int, BasicBlock]]:
     """
-    TODO
+    Accepts function symbols. Loops through them and
+    extracts cfg for each of the provided function symbol.
+    # TODO prints should be done with logger
+    returns dictionary of basic blocks
     """
+    func_basic_blocks: dict[str, dict[int, BasicBlock]] = {}
 
     # Loop through function symbols
     for i, func_sym in enumerate(function_symbols):
@@ -483,9 +465,6 @@ def extract_all_cfgs(function_symbols: list[lief.ELF.Symbol]):
         basic_blocks, adj = extract_cfg_of_function(func_sym)
 
         if not basic_blocks:
-            continue
-
-        if not basic_blocks:
             print("No basic blocks generated for this function.")
             continue
 
@@ -494,9 +473,15 @@ def extract_all_cfgs(function_symbols: list[lief.ELF.Symbol]):
             print(f"  {bb}")
             for insn_idx, insn in enumerate(bb.instructions):
                 print(f"    0x{insn.address:x}:\t{insn.mnemonic}\t{insn.op_str}")
-            print(f"    Successors: {adj.get(bb_addr, [])}")
+            print(f"    Successors: {[(hex(addr), desc) for addr, desc in adj.get(bb_addr, [])]}")
 
         print_adj(adj)
+
+        # Add it
+        func_basic_blocks[func_sym.name] = basic_blocks
+
+
+    return func_basic_blocks
 
 
 ######## Print related functions #########
@@ -593,7 +578,7 @@ def disassemble_code(code: bytes, base_addr: int) -> list[capstone.CsInsn]:
     return list(md.disasm(code, base_addr))
 
 
-######## Main functions ##################
+######## Setup functions #################
 ##########################################
 
 
@@ -625,26 +610,6 @@ def filter_function_symbols(function_symbols: list[lief.ELF.Symbol]) -> list[lie
 
 
 @typechecked
-def analyze_elf(filepath: str, all_functions: bool = True, section_name: str = ".text"):
-    # Get binary
-    binary: lief.ELF.Binary = get_binary(filepath)
-
-    # Set up some global variables
-    setup_env(binary)
-
-    # Find relevant function symbols
-    function_symbols: list[lief.ELF.Symbol] = \
-        extract_function_symbols_from_section(binary, binary.get_section(".text"))
-
-    # Filter those function symbols to our needs
-    function_symbols = filter_function_symbols(function_symbols)
-
-    # With binary and function symbols get all cfgs
-    all_cfgs = extract_all_cfgs(function_symbols)
-    return all_cfgs
-
-
-@typechecked
 def parse_input():
     """
     TODO
@@ -662,6 +627,29 @@ def parse_input():
             functions_to_analyze.append(fun)
     return args.filepath
 
+
+######## Main functions ##################
+##########################################
+
+
+@typechecked
+def analyze_elf(filepath: str, all_functions: bool = True, section_name: str = ".text"):
+    # Get binary
+    binary: lief.ELF.Binary = file_functions.get_binary(filepath)
+
+    # Set up some global variables
+    setup_env(binary)
+
+    # Find relevant function symbols
+    function_symbols: list[lief.ELF.Symbol] = \
+        extract_function_symbols_from_section(binary, binary.get_section(".text"))
+
+    # Filter those function symbols to our needs
+    function_symbols = filter_function_symbols(function_symbols)
+
+    # With binary and function symbols get all cfgs by function
+    all_cfgs: dict[str, dict[int, BasicBlock]] = extract_all_cfgs(function_symbols)
+    return all_cfgs
 
 
 if __name__ == "__main__":

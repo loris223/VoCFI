@@ -50,6 +50,42 @@ def group_backward_jumps(backward_bbs: list[BasicBlock],
         
 
 
+@typechecked
+def determine_exit_node(loops: list[LoopPath]) -> None:
+    """
+    TODO
+    """
+
+    for l in loops:
+        """
+        bbs: list[BasicBlock] = l.get_backward_jump_bbs()
+        end_addrs: list[int] = [bb.end_address for bb in bbs]
+        index_max = max(range(len(end_addrs)), key=end_addrs.__getitem__)
+        l.set_continuation_block(bbs[index_max])
+        """
+        l.sort_backward_jump_bbs()
+        l.set_exit_block(l.get_backward_jump_bbs[-1])
+
+
+@typechecked
+def determine_continuation_node(cfg: dict[int, BasicBlock], loops: list[LoopPath]) -> None:
+    """
+    TODO
+    """
+
+    for l in loops:
+        """
+        bbs: list[BasicBlock] = l.get_backward_jump_bbs()
+        end_addrs: list[int] = [bb.end_address for bb in bbs]
+        index_max = max(range(len(end_addrs)), key=end_addrs.__getitem__)
+        l.set_continuation_block(bbs[index_max])
+        """
+        for l in loops:
+            bb: BasicBlock = l.get_exit_block()
+            dst: int = max(bb.cft.get_destinations())
+            l.set_continuation_block(cfg[dst])
+
+
 
 @typechecked
 def analyze_loops_function(cfg: dict[int, BasicBlock]):
@@ -73,9 +109,10 @@ def analyze_loops_function(cfg: dict[int, BasicBlock]):
     # Group barckward jumps
     group_backward_jumps(backward_bbs, entry_bbs, loops)
 
-    # TODO
     # determine exit node
+    determine_exit_node(loops)
     # determine continuation node
+    determine_continuation_node(cfg, loops)
 
 
     

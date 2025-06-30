@@ -78,6 +78,9 @@ class LoopPath:
     def add_backward_jump_bb(self, backward_jump_bb: BasicBlock) -> None:
         self.backward_jump_bbs.append(backward_jump_bb)
 
+    def get_backward_jump_bbs(self) -> list[BasicBlock]:
+        return self.backward_jump_bbs
+
     def set_entry_block(self, entry_bb: BasicBlock) -> None:
         self.entry_bb = entry_bb
     
@@ -86,11 +89,16 @@ class LoopPath:
 
     def set_exit_block(self, exit_bb: BasicBlock) -> None:
         self.exit_bb = exit_bb
+    
+    def get_exit_block(self) -> BasicBlock:
+        return self.exit_bb
 
     def set_continuation_block(self, continuation_bb: BasicBlock) -> None:
         self.set_continuation_block = continuation_bb
     
-    
+    def sort_backward_jump_bbs(self) -> None:
+        self.backward_jump_bbs = \
+            sorted(self.backward_jump_bbs, key=lambda x: x.end_address)
 
 
     @staticmethod

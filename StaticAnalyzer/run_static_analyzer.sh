@@ -50,13 +50,7 @@ list_modes(){
     echo -e "${YELLOW}1. Compile only (object file)${NC}"
     echo -e "${YELLOW}2. Compile and link (executable)${NC}"
 }
-:'
-list_outputs(){
-    # Choose outputs
-    echo -e "${CYAN}Choose outputs:${NC}"
-    echo -e "${YELLOW}1. Mandatory${NC}"
-    echo -e "${YELLOW}2.${NC}"
-}'
+
 ##############################
 ##############################
 
@@ -249,7 +243,12 @@ elif [ "$QUICK_MODE" = true ]; then
     execute_
 
 else
-    echo "Interactive mode!"
+    choose_program
+    choose_mode
+    program_dir="${PROGRAMS_DIRECTORY}/$SELECTED_PROGRAM"
+    output_name="${program_dir}/${SELECTED_PROGRAM}"
+    detect_main_file
+    execute_
 fi
 
 

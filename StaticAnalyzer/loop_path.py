@@ -1,6 +1,7 @@
 from typeguard import typechecked
 from basic_block import BasicBlock
 from typing import Optional
+from simple_path import SimplePath
 
 
 @typechecked
@@ -46,12 +47,14 @@ class LoopPath:
 
     CUR_ID: int = 0
     ENTRY_BLOCKS: list[BasicBlock] = []
+    LOOP_PATHS: list['LoopPath'] = []
     
 
     def __init__(self):
         # Set id, every loop should have unique id
         self.id = LoopPath.CUR_ID
         LoopPath.CUR_ID += 1
+        LoopPath.LOOP_PATHS.append(self)
 
         # Set entry basic block, it should be unique to every object
         # It is also enforced
@@ -65,12 +68,22 @@ class LoopPath:
         self.exit_bb: Optional[BasicBlock] = None
 
         # Continuation bb
-        self.continuation_bb = Optional[BasicBlock] = None
+        self.continuation_bb: Optional[BasicBlock] = None
+
+        # break statements and other conditions
+        self.forward_outside_jump_bbs: list[BasicBlock] = []
+
+        # loop blocks
+        self.loop_bbs: set[BasicBlock] = []
+
+
+        # 
+        self.paths: list[SimplePath] = []
 
     
     def set_entry_bb(self, bb: BasicBlock) -> None:
         self.entry_bb = bb
-        LoopPath.ENTRY_BLOCKS.append()
+        LoopPath.ENTRY_BLOCKS.append(bb)
 
     def set_backward_jumps(self, backward_jump_bbs: list[BasicBlock]) -> None:
         self.backward_jump_bbs = backward_jump_bbs
@@ -94,7 +107,7 @@ class LoopPath:
         return self.exit_bb
 
     def set_continuation_block(self, continuation_bb: BasicBlock) -> None:
-        self.set_continuation_block = continuation_bb
+        self.continuation_bb = continuation_bb
     
     def sort_backward_jump_bbs(self) -> None:
         self.backward_jump_bbs = \

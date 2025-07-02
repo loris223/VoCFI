@@ -16,14 +16,22 @@ from typing import Optional
 # for all that is inside class.
 @typechecked
 class SimplePath:
+    CURR_ID: int = 0
+    SIMPLE_PATHS: list['SimplePath'] = []
 
     def __init__(self):
+        self.id: int = SimplePath.get_id()
         self.path: list[BasicBlock] = []
         self.ends_with_loop: bool = False
         self.ends_with_loop_bb: BasicBlock = None
         self.ends_with_path: bool = False
         self.ends_with_path_bb: BasicBlock = None
-        self.successor_paths: list[SimplePath]
+        self.successor_paths: list[SimplePath] = []
+        self.link_paths: list[SimplePath] = []
+        SimplePath.SIMPLE_PATHS.append(self)
+        self.to_be_extended: bool = False
+        self.loop_end: bool = False
+        self.function_end: bool = False
     
     def append(self, bb: BasicBlock):
         self.path.append(bb)
@@ -55,27 +63,71 @@ class SimplePath:
         return self.path[-1]
     
     def add_successor(self, sp: 'SimplePath') -> None:
-        self.seccessor_paths.append(sp)
+        self.successor_paths.append(sp)
     
     def assign_successor_list(self, sps: list['SimplePath']) -> None:
         self.successor_paths = sps
 
     def __repr__(self):
-        path_type = "PATH"
-        loop_info = ""
+        # Calculate start and end addresses
+        start_addr = f"0x{self.path[0].start_address:x}" if self.path else "None"
+        end_addr = f"0x{self.path[-1].end_address:x}" if self.path else "None"
         
+        # Header with ID, length and addresses
+        header = (
+            f"SimplePath(ID={self.id}, length={len(self.path)} blocks, "
+            f"start={start_addr}, end={end_addr})"
+        )
+        
+        # End conditions
+        end_info = []
         if self.ends_with_loop:
-            loop_addr = f"0x{self.ends_with_loop_bb.start_address:x}" if self.ends_with_loop_bb else "None"
-            loop_info = f", ends with loop @ {loop_addr}"
-            
-        blocks_info = "\n  ".join(
-            f"{i}: {bb}" 
-            for i, bb in enumerate(self.path)
-        )
-        return (
-            f"SimplePath(type={path_type}{loop_info}, "
-            f"length={len(self.path)} blocks):\n  {blocks_info}\n"
-        )
+            addr = f"0x{self.ends_with_loop_bb.start_address:x}"
+            end_info.append(f"Ends with loop @ {addr}")
+        if self.ends_with_path:
+            addr = f"0x{self.ends_with_path_bb.start_address:x}"
+            end_info.append(f"Ends with path @ {addr}")
+        
+        # Block list with improved indentation
+        blocks_info = []
+        for i, bb in enumerate(self.path):
+            addr_range = f"0x{bb.start_address:x}-0x{bb.end_address:x}"
+            blocks_info.append(f"{i}: {addr_range}")
+        
+        # Successors
+        succ_info = "None"
+        if self.successor_paths:
+            succ_ids = ", ".join(str(sp.id) for sp in self.successor_paths)
+            succ_info = f"[{succ_ids}]"
+        
+        # Link infos
+        link_info = "None"
+        if self.link_paths:
+            link_ids = ", ".join(str(sp.id) for sp in self.link_paths)
+            link_info = f"[{link_ids}]"
+        
+        # Build output with consistent 4-space indentation
+        parts = [header]
+        
+        if end_info:
+            parts.append("    " + "\n    ".join(end_info))
+        
+        if blocks_info:
+            parts.append("    Blocks:")
+            # Add extra 4-space indent for block lines
+            parts.extend("        " + line for line in blocks_info)
+        
+        parts.append(f"    Successors: {succ_info}")
+
+        parts.append(f"    Links: {link_info}")
+        
+        return "\n".join(parts) + "\n"
+
+    
+    @staticmethod
+    def get_id() -> int:
+        SimplePath.CURR_ID += 1
+        return SimplePath.CURR_ID - 1 
 
 
 

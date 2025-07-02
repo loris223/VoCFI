@@ -33,48 +33,50 @@ from typeguard import typechecked
 from basic_block import BasicBlock
 from control_flow_type import ControlFlowType
 import logging
+from simple_path import SimplePath
+from typing import Optional
+from loop_handler import analyze_loops
 logging.basicConfig(level=logging.DEBUG)
 
 
 
 
 
-@typechecked
-def get_loops(func_name: str, func_cfg: dict[int, BasicBlock]):
-    """
-    TODO
-    """
-    logging.info(f"Detecting loops in function {func_name}.")
-    start_addr: int
-    bb: BasicBlock
-    for start_addr, bb in func_cfg.items():
-        end_addr = bb.instructions[-1].address
-        cft: ControlFlowType = bb.cft
-        if cft.is_linking():
-            continue
-        if cft.goes_backwards(end_addr):
-            logging.info(f"Backwards jump detected! This should be some kind of loop.")
 
 
 @typechecked
 def trace_path(bb: BasicBlock, func_cfg: dict[int, BasicBlock],\
-               last_bb: BasicBlock)-> list[list[BasicBlock]]:
+               last_bb: BasicBlock)-> SimplePath:
     """
     TODO
     """
     # End condition
     if bb.start_address == last_bb.start_address:
-        return [[last_bb]]
+        sp: SimplePath = SimplePath()
+        sp.append(bb)
+        return sp
+    elif bb.is_loop:
+        sp: SimplePath = SimplePath()
+        sp.set_end_loop_bb(bb)
+        sp.to_be_extended = True
+        return sp
     
     # Result
-    res: list[list[BasicBlock]] = []
+    res: Optional[SimplePath] = None
 
     # Get all destinations of basic block
     dests = bb.cft.get_destinations()
-    for d in dests:
-        res = res + trace_path(func_cfg[d], func_cfg, last_bb)
-        
-    res = list(map(lambda x: [bb] + x, res))
+    if len(dests) > 1:
+        res = SimplePath()
+        res.append(bb)
+        p1: SimplePath = trace_path(func_cfg[dests[0]], func_cfg, last_bb)
+        p2: SimplePath = trace_path(func_cfg[dests[1]], func_cfg, last_bb)
+        res.add_successor(p1)
+        res.add_successor(p2)
+    else:
+        res: SimplePath = trace_path(func_cfg[dests[0]], func_cfg, last_bb)
+        res.prepend(bb)
+
     return res
 
 
@@ -89,6 +91,11 @@ def mark_loops(func_cfg: dict[int, BasicBlock]) -> None:
         if bb.cft.goes_backwards(bb.end_address):
             bb.is_loop = True
 
+
+
+@typechecked
+def get_unextended_paths(sp: SimplePath) -> list[SimplePath]:
+    pass
 
 @typechecked
 def generate_paths_of_function(func_name: str, func_cfg: dict[int, BasicBlock]):
@@ -105,10 +112,35 @@ def generate_paths_of_function(func_name: str, func_cfg: dict[int, BasicBlock]):
 
     # First mark loop entries
     mark_loops(func_cfg)
+
     # When we have the first block it is time to trace
     # all the others
-    res = trace_path(first_bb, func_cfg, last_bb)
+    print("Trace path")
+    res: SimplePath = trace_path(first_bb, func_cfg, last_bb)
     print(res)
+
+    
+    """
+    while was_extended:
+        was_extended = False
+        for sp in res:
+            if sp.get_last_bb().start_address != last_bb.start_address:
+                was_extended = True
+                new_start_1: Optional[BasicBlock] = sp.get_ends_with_loop()
+                new_start_2: Optional[BasicBlock] = sp.get_ends_with_path()
+                if (new_start_1 is not None) and (new_start_2 is not None):
+                    print("Something wrong. - generate_paths_of_function")
+                elif new_start_1 is not None:
+                    #tmp_res: list[SimplePath] = trace_loop(new_start_1, func_cfg, last_bb)
+                    #sp.assign_successor_list(tmp_res)
+                    pass
+                elif new_start_2 is not None:
+                    tmp_res: list[SimplePath] = trace_path(new_start_2, func_cfg, last_bb)
+                    sp.assign_successor_list(tmp_res)
+                else:
+                    print("Something wrong. - generate_paths_of_function")
+    """
+
 
 
 
@@ -121,7 +153,9 @@ def generate_all_paths(all_cfgs: dict[str, dict[int, BasicBlock]]):
     logging.info("Starting to generate all paths of all functions.")
     func_name: str
     func_cfg: dict[int, BasicBlock]
+    
+    analyze_loops(all_cfgs)
     for func_name, func_cfg in all_cfgs.items():
-        get_loops(func_name, func_cfg)
+        # trace_loop(func_name, func_cfg)
         generate_paths_of_function(func_name, func_cfg)
 

@@ -442,6 +442,16 @@ def extract_cfg_of_function(symbol: lief.ELF.Symbol)\
     # Assign adjacency list to basic blocks
     assign_adj_to_bb(basic_blocks, adj)
 
+    
+    # Link blocks between themselves
+    for addr, bb in basic_blocks.items():
+        for trg_addr, _ in bb.successors:
+            if trg_addr in basic_blocks:
+                bb.successors_2.append(basic_blocks[trg_addr])
+            else:
+                bb.successors_2.append(None)
+
+
     return basic_blocks, adj
 
 
@@ -482,6 +492,13 @@ def extract_all_cfgs(function_symbols: list[lief.ELF.Symbol]) -> dict[str, dict[
 
 
     return func_basic_blocks
+
+
+@typechecked
+def link_blocks(dict_of_bb: dict[int, BasicBlock]) -> None:
+    """
+    TODO 
+    """
 
 
 ######## Print related functions #########

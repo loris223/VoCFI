@@ -77,8 +77,8 @@ class LoopPath:
         self.loop_bbs: set[BasicBlock] = []
 
 
-        # 
-        self.paths: list[SimplePath] = []
+        # There should be list of paths that the loop can take
+        self.path: Optional[SimplePath] = None
 
     
     def set_entry_bb(self, bb: BasicBlock) -> None:

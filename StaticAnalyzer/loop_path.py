@@ -2,6 +2,9 @@ from typeguard import typechecked
 from basic_block import BasicBlock
 from typing import Optional
 from simple_path import SimplePath
+import typing
+if typing.TYPE_CHECKING:
+    from meta_path import MetaPath
 
 
 @typechecked
@@ -64,21 +67,28 @@ class LoopPath:
         # to jump to an entry node
         self.backward_jump_bbs: list[BasicBlock] = []
 
-        # Exit exit bb
+        # Exit BB should be the one that keeps loop running
         self.exit_bb: Optional[BasicBlock] = None
 
-        # Continuation bb
+        # Continuation bb should be the first bb after
+        # the loop has ended
         self.continuation_bb: Optional[BasicBlock] = None
+
+        # loop blocks that the loop contains
+        self.loop_bbs: set[BasicBlock] = []
+        self.loop_bbs_determined: bool = False
 
         # break statements and other conditions
         self.forward_outside_jump_bbs: list[BasicBlock] = []
+        self.forward_outside_jump_bbs_determined: bool = False
 
-        # loop blocks
-        self.loop_bbs: set[BasicBlock] = []
+        # Parent
+        self.parent: Optional[LoopPath] = None
+        self.childs: list[LoopPath] = []
 
 
         # There should be list of paths that the loop can take
-        self.path: Optional[SimplePath] = None
+        self.path: list[Optional['MetaPath']] = None
 
     
     def set_entry_bb(self, bb: BasicBlock) -> None:

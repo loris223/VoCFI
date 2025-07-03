@@ -8,6 +8,8 @@ from typeguard import typechecked
 from basic_block import BasicBlock
 from loop_path import LoopPath
 from simple_path import SimplePath
+from meta_path import MetaPath
+import copy
 
 
 
@@ -52,7 +54,7 @@ def group_backward_jumps(backward_bbs: list[BasicBlock],
         
 
 @typechecked
-def determine_exit_nodes(loops: list[LoopPath]) -> None:
+def determine_exit_node(loops: list[LoopPath]) -> None:
     """
     TODO
     """
@@ -69,7 +71,7 @@ def determine_exit_nodes(loops: list[LoopPath]) -> None:
 
 
 @typechecked
-def determine_continuation_nodes(cfg: dict[int, BasicBlock], loops: list[LoopPath]) -> None:
+def determine_continuation_node(cfg: dict[int, BasicBlock], loops: list[LoopPath]) -> None:
     """
     TODO
     """
@@ -87,69 +89,174 @@ def determine_continuation_nodes(cfg: dict[int, BasicBlock], loops: list[LoopPat
 
 
 @typechecked
-def trace_loop_path(bb: BasicBlock, func_cfg: dict[int, BasicBlock],\
-               last_bbs: list[BasicBlock], current_loop: LoopPath,\
-                entry_bbs: list[BasicBlock])-> SimplePath:
+def trace_loop_path(bb: BasicBlock, last_bbs: list[BasicBlock], current_loop: LoopPath,
+                    loops: list[LoopPath], entry_bbs: list[BasicBlock],
+                    cur_sp: SimplePath)-> list[MetaPath]:
     """
     TODO
     """
     # Nested loop
     if (current_loop.entry_bb is not bb) and (bb in entry_bbs):
-        sp: SimplePath = SimplePath()
-        sp.set_end_loop_bb(bb)
-        sp.to_be_extended = True
-        return sp
+        # print(f"Jow: {bb}")
+        #sp: SimplePath = SimplePath()
+        index: int = entry_bbs.index(bb)
+        next_loop: LoopPath = loops[index]
+        # sp.extension_path = loops[index]
+        mp: MetaPath = MetaPath()
+        mp.append(cur_sp)
+        mp.append(next_loop)
+        res: list[MetaPath] = []
+        for d in next_loop.forward_outside_jump_bbs:
+            # print(f"Next {d}")
+            res = res + trace_loop_path(d, last_bbs, current_loop, loops, entry_bbs, SimplePath())
+            
+        
+        for r in res:
+            r.prepend_meta_path(mp)
+        return res
+    
     # End condition
     if bb in last_bbs:
-        sp: SimplePath = SimplePath()
-        sp.append(bb)
-        # TODO
-        # add successors
-        sp.to_be_extended = True
-        sp.loop_end = True
-        return sp
+        cur_sp.append(bb)
+        mp: MetaPath = MetaPath()
+        mp.append(cur_sp)
+        return [mp]
     
-    # Add loop basic block
-    current_loop.loop_bbs.append(bb)
+    cur_sp.append(bb)
+    #mp: MetaPath
+    res: list[MetaPath] = []
 
-    # Result
-    res: SimplePath
+    if len(bb.successors_2) > 1:
+        bb_x1: BasicBlock = bb.successors_2[0]
+        bb_x2: BasicBlock = bb.successors_2[1]
+        # Create new simple path object and copy its contents
+        sp: SimplePath = SimplePath()
+        sp.path = cur_sp.path.copy()
 
-    # Get all destinations of basic block
-    dests = bb.cft.get_destinations()
-    if len(dests) > 1:
-        # If there is a junction we should make an end to current
-        # Simple Path and then follow both ways and make new SimplePath
-        res = SimplePath()
-        res.append(bb)
-        p1: SimplePath = trace_loop_path(func_cfg[dests[0]], func_cfg, last_bbs, current_loop, entry_bbs)
-        p2: SimplePath = trace_loop_path(func_cfg[dests[1]], func_cfg, last_bbs, current_loop, entry_bbs)
-        res.add_successor(p1)
-        res.add_successor(p2)
+        res = res + trace_loop_path(bb_x1, last_bbs, current_loop, loops, entry_bbs, cur_sp)
+        res = res + trace_loop_path(bb_x2, last_bbs, current_loop, loops, entry_bbs, sp)
+    elif len(bb.successors_2) == 1:
+        bb_x: BasicBlock = bb.successors_2[0]
+        res = res + trace_loop_path(bb_x, last_bbs, current_loop, loops, entry_bbs, cur_sp)
     else:
-        res: SimplePath = trace_loop_path(func_cfg[dests[0]], func_cfg, last_bbs, current_loop, entry_bbs)
-        res.prepend(bb)
-    #for d in dests:
-    #    res = res + trace_loop_path(func_cfg[d], func_cfg, last_bbs, current_loop, entry_bbs)
-        #print(res)
+        print("Problem - trace loop path")
 
-    #list(map(lambda x: x.prepend(bb), res))
+    #for bb_x in bb.successors_2:
+    #    res = res + trace_loop_path(bb_x, last_bbs, current_loop, loops, entry_bbs, cur_sp)
+    
+    #for r in res:
+    #    r.prepend_meta_path()
+    
+    return res
+    
+    
+
+
+@typechecked
+def determine_forward_outside_jumps(loop: LoopPath) -> None:
+    """
+    TODO
+    
+    """
+    for bb in loop.loop_bbs:
+        for bb_x in bb.successors_2:
+            if bb_x.start_address > loop.exit_bb.end_address:
+                loop.forward_outside_jump_bbs.append(bb_x)
+
+    
+@typechecked
+def determine_all_loop_blocks(bb: BasicBlock, loop: LoopPath, entry_bbs: list[BasicBlock],
+                              loops: list[LoopPath],
+                              visited: list[BasicBlock]) -> list[BasicBlock]:
+    """
+    TODO
+    first bb should be the entry block of the loop
+    This does not work if the nested loop has not been resolved, maybe can work
+    by the pure luck or compiler design but it is not ok. 
+    """
+
+    # We have three conditions that can stop recursion
+    # 1. There is a nested loop
+    # 2. The BasicBlock has already been visited
+    # 3. We have reached continuation node
+    if (bb != loop.entry_bb) and (bb in entry_bbs):
+        #print("Thhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh")
+        # TODO
+        # Maybe we could just call recursively?
+        # Nah
+        # Maybe just flag it and deal with that later
+        # add loops argument to the function
+        # identify child loop and somehow use it
+        index: int = entry_bbs.index(bb)
+        child_loop: LoopPath = loops[index]
+        res: list[BasicBlock] = []
+        if child_loop.forward_outside_jump_bbs_determined:
+            #print("To se ne zgodi")
+            # If the outs of the child loop are determined
+            # Then we can follow the paths
+            bb_x: BasicBlock
+            for bb_x in child_loop.forward_outside_jump_bbs:
+                res = res + determine_all_loop_blocks(bb_x, loop, entry_bbs, loops, visited)
+        else:
+            #print("To se zgodi")
+            loop.loop_bbs_determined = False
+
+        return res
+    
+    if (bb in visited) or (bb == loop.continuation_bb):
+        #print(f"Visited: {visited}")
+        #print(f"Pogoji: {(bb in visited)}, {(bb == loop.continuation_bb)}")
+        #print("Vracamo")
+        return []
+    
+    # Otherwise we can add this bb to loop block
+    res: list[BasicBlock] = [bb]
+    # Add to visited blocks
+    visited.append(bb)
+
+    # Go through all successors of the block
+    for suc in bb.successors_2:
+        #print(f"suc: {suc}")
+        res = res + determine_all_loop_blocks(suc, loop, entry_bbs, loops, visited)
+        #print(f"res: {res}")
+    #print(f"res: {res}")
     return res
 
 
 @typechecked
-def determine_forward_outside_jumps() -> None:
+def determine_nested_loops\
+    (bb: BasicBlock, loop: LoopPath, entry_bbs: list[BasicBlock],
+     loops: list[LoopPath], visited: list[BasicBlock]) -> None:
     """
     TODO
-    Maybe we should trace paths in loops and
-    afterwards find forward outside jumps
     """
+    # We have three conditions that can stop recursion
+    # 1. There is a nested loop
+    # 2. The BasicBlock has already been visited
+    # 3. We have reached continuation node
 
+    if (bb in visited) or (bb == loop.continuation_bb):
+        return
+    
+    # Here we are interested in nested loops
+    if (bb != loop.entry_bb) and (bb in entry_bbs):
+        index: int = entry_bbs.index(bb)
+        loops[index].parent = loop
+        loop.childs.append(loops[index])
+        return
+    
+    # Add to visited blocks
+    visited.append(bb)
+
+    # Go through all successors of the block
+    for suc in bb.successors_2:
+        determine_nested_loops(suc, loop, entry_bbs, loops, visited)
+    
 
 @typechecked
 def analyze_loops_function(cfg: dict[int, BasicBlock]):
     """
-    The process is described in Looppath
+    The process is described in LoopPath
     """
     
     # Identify backward jumps
@@ -157,7 +264,7 @@ def analyze_loops_function(cfg: dict[int, BasicBlock]):
 
     # Identify entry basic blocks
     entry_bbs: list[BasicBlock] = identify_entry_bbs(backward_bbs, cfg)
-    print(f"Entry blocks: {entry_bbs}")
+    # print(f"Entry blocks: {entry_bbs}")
 
     # based on entry blocks create loops
     loops: list[LoopPath] = []
@@ -172,13 +279,95 @@ def analyze_loops_function(cfg: dict[int, BasicBlock]):
     group_backward_jumps(backward_bbs, entry_bbs, loops)
 
     # determine exit node
-    determine_exit_nodes(loops)
+    determine_exit_node(loops)
     # print(f"Exit node: {loops[0].exit_bb}")
     # determine continuation node
-    determine_continuation_nodes(cfg, loops)
+    determine_continuation_node(cfg, loops)
+
+    
+
+    """
+    Here we have a problem. The thing is that this three
+    things - loop blocks, forward outside jumps and nested
+    loops are interconnected. One can not be determined without
+    the other being precomputed. It is hard to predefine what 
+    has to be precomputed. We could do one big recursion that 
+    handles all the cases but it will probably be prone to errors.
+    We have to somehow slice it to pieces. Can we define order
+    of computiations?
+        - We can start with the blocks that don't have childs?
+        - Hard to do it in code
+    We wil just iteratively do all together. Ugly but should
+    be the fastest way to implement.
+    """
+    changed: bool = True
+    while changed:
+        ll: list[LoopPath] = loops.copy()
+        l: LoopPath
+        # determine all loop blocks
+        for l in ll:
+            if l.loop_bbs_determined:
+                continue
+            l.loop_bbs_determined = True
+            l.loop_bbs = determine_all_loop_blocks(l.entry_bb, l, entry_bbs, loops, [])
+            #print("Loop blocks")
+            #print(f"Loop blocks determined: {l.loop_bbs_determined}")
+            #print(l.loop_bbs)
+
+        # Filter the ones that the loop blocks weren't determined
+        ll = [l for l in ll if l.loop_bbs_determined]
+        #print(f"Len of ll: {len(ll)}")
+        # now that we have all loop blocks
+        # we can:
+        # determine forward outside jumps
+        for l in ll:
+            if l.forward_outside_jump_bbs_determined:
+                continue
+            l.forward_outside_jump_bbs_determined = True
+            determine_forward_outside_jumps(l)
+        if len(ll) == len(loops):
+            changed = False
+        
+    # Determine nested loops
+    for l in ll:
+        determine_nested_loops(l.entry_bb, l, entry_bbs, ll, [])
+        #print(f"Childs: {l.childs}")
+
 
     # print(f"Continuation node: {loops[0].continuation_bb}")
 
+    for l in ll:
+        print(f"Loop")
+        print(f"Entry bb: {l.entry_bb}")
+        print(f"Exit bb: {l.exit_bb}")
+        print(f"Exits: {l.forward_outside_jump_bbs}")
+
+    # Now the loop tracing
+    
+    meta_paths: list[MetaPath]
+    for l in loops:
+        res: list[MetaPath] = trace_loop_path(l.entry_bb, [l.exit_bb, l.continuation_bb], l, loops, entry_bbs, SimplePath())
+        l.path = res
+        print(f"res: {res}")
+
+    """
+    meta_paths: list[MetaPath]
+    lp: SimplePath
+    for lp in loop_paths:
+        mp: MetaPath = MetaPath()
+        mp.append(lp)
+        if lp.to_be_extended:
+            mp.append(lp.extension_path)
+        meta_paths.append(mp)
+    
+    changed = True
+    while changed:
+        for mp in meta_paths:
+            pass
+        changed = False
+    """            
+            
+    """
     # These are paths for every loop starting 
     # with entry node but the continuation could
     # follow via SimplePath linkeage like tree
@@ -201,6 +390,7 @@ def analyze_loops_function(cfg: dict[int, BasicBlock]):
             sp.to_be_extended = False
     
     print(SimplePath.SIMPLE_PATHS)
+    """
             
 
 @typechecked

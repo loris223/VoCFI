@@ -5,6 +5,10 @@ TODO
 from typeguard import typechecked
 from basic_block import BasicBlock
 from typing import Optional
+#from loop_path import LoopPath
+import typing
+if typing.TYPE_CHECKING:
+    from loop_path import LoopPath
 
 
 # Functionality for the type_loop should be 
@@ -30,6 +34,7 @@ class SimplePath:
         self.link_paths: list[SimplePath] = []
         SimplePath.SIMPLE_PATHS.append(self)
         self.to_be_extended: bool = False
+        self.extension_path: Optional[LoopPath] = None
         self.loop_end: bool = False
         self.function_end: bool = False
     

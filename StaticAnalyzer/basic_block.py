@@ -9,15 +9,25 @@ Attributes:
 from typeguard import typechecked
 from control_flow_type import ControlFlowType
 from typing import Optional
+import capstone
 
 @typechecked
 class BasicBlock:
     def __init__(self, start_address):
+        # Start and end address of BasicBlock
         self.start_address: int = start_address
-        self.instructions = []
         self.end_address: int = start_address # Will be updated
-        self.successors = [] # List of (target_address, edge_type)
+
+        # The instructions of the BasicBlock
+        self.instructions: list[capstone.CsInsn] = []
+        # Successors in the style of List of (target_address, edge_type)
+        self.successors: list[tuple[int, str]] = []
+        # Successors in the style of List of BasicBlocks that follow
         self.successors_2: list[Optional[BasicBlock]] = []
+        
+        # Every BasicBlock has some type of the control flow 
+        # associated with it and this object should take care 
+        # of that information
         self.cft: ControlFlowType = None
         self.is_loop = False
 

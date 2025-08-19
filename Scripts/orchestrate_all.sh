@@ -11,7 +11,8 @@ NC='\033[0m'              # No Color
 
 
 CONFIGURATION_MODE=false
-DISPLAY_SOURCE_CODE=false
+DISPLAY_SOURCE_CODE=true
+SHOW_BINARY=false
 
 
 print_top_sign(){
@@ -48,6 +49,10 @@ parse_args() {
                 ;;
             --display-source)
                 DISPLAY_SOURCE_CODE=true
+                shift
+                ;;
+            --show-binary)
+                SHOW_BINARY=true
                 shift
                 ;;
             *)
@@ -94,6 +99,7 @@ fi
 # We should have:
 # $PROGRAM_PATH
 
+
 # First display source if set
 if [ "$DISPLAY_SOURCE_CODE" = true ]; then
     print_top_sign "SOURCE CODE"
@@ -117,8 +123,14 @@ print_bottom_sign "$COMPILATION_TEXT"
 # echo -e "${GREEN}Compilation successful: ${YELLOW}$COMPILED_BIN${NC}" >&2
 
 # Show compiled binary
-# TODO
 # Probably just start radare2 in a seprate terminal
+# Nah just display command if one wants to check it
+#if [ "$SHOW_BINARY" = true ]; then
+echo -e "${CYAN}If you want to inspect executable in radare2(toggle view with p):${NC}" >&2
+echo -e "${MAGENTA}r2 -c 'aaa; s main; V;' $COMPILED_BIN${NC}" >&2
+echo -e "${CYAN}If you want to see  radare2 control flow graph:${NC}" >&2
+echo -e "${MAGENTA}r2 -c 'aaa; s main; agf;' $COMPILED_BIN${NC}" >&2
+#fi
 
 
 # Static Analyzer

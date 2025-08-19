@@ -1,1 +1,10 @@
-SamplePrograms/HelloWorld/hello
+# Ignore everything in folder SamplePrograms
+SamplePrograms/*/
+
+# Allow for main files
+!SamplePrograms/*/main.c
+!SamplePrograms/*/main.cpp
+
+StaticAnalyzer/__pycache__/*
+Legacy/*
+Ghidra/*

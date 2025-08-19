@@ -36,6 +36,8 @@ import logging
 from simple_path import SimplePath
 from typing import Optional
 from loop_handler import analyze_loops
+from loop_path import LoopPath
+from meta_path import MetaPath
 logging.basicConfig(level=logging.DEBUG)
 
 
@@ -45,51 +47,55 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 @typechecked
-def trace_path(bb: BasicBlock, func_cfg: dict[int, BasicBlock],\
-               last_bb: BasicBlock)-> SimplePath:
+def trace_path(bb: BasicBlock, last_bb: BasicBlock,
+               cur_sp: SimplePath) -> list[MetaPath]:
     """
     TODO
     """
-    # End condition
-    if bb.start_address == last_bb.start_address:
-        sp: SimplePath = SimplePath()
-        sp.append(bb)
-        return sp
-    elif bb.is_loop:
-        sp: SimplePath = SimplePath()
-        sp.set_end_loop_bb(bb)
-        sp.to_be_extended = True
-        return sp
+    # Loop encounter
+    if bb in LoopPath.ENTRY_BLOCKS:
+        index: int = LoopPath.ENTRY_BLOCKS.index(bb)
+        next_loop: LoopPath = LoopPath.LOOP_PATHS[index]
+        mp: MetaPath = MetaPath()
+        mp.append(cur_sp)
+        mp.append(next_loop)
+        res: list[MetaPath] = []
+        for d in next_loop.forward_outside_jump_bbs:
+            res = res + trace_path(d, last_bb, SimplePath())
+        for r in res:
+            r.prepend_meta_path(mp)
+        return res
     
+    # End condition
+    if bb == last_bb:
+        cur_sp.append(bb)
+        mp: MetaPath = MetaPath()
+        mp.append(cur_sp)
+        return [mp]
+    
+    cur_sp.append(bb)
     # Result
-    res: Optional[SimplePath] = None
+    res: list[MetaPath] = []
 
     # Get all destinations of basic block
-    dests = bb.cft.get_destinations()
-    if len(dests) > 1:
-        res = SimplePath()
-        res.append(bb)
-        p1: SimplePath = trace_path(func_cfg[dests[0]], func_cfg, last_bb)
-        p2: SimplePath = trace_path(func_cfg[dests[1]], func_cfg, last_bb)
-        res.add_successor(p1)
-        res.add_successor(p2)
+    if len(bb.successors_2) > 1:
+        bb_x1: BasicBlock = bb.successors_2[0]
+        bb_x2: BasicBlock = bb.successors_2[1]
+
+        # Create new simple path object and copy its contents
+        sp: SimplePath = SimplePath()
+        sp.path = cur_sp.path.copy()
+
+        res = res + trace_path(bb_x1, last_bb, cur_sp)
+        res = res + trace_path(bb_x2, last_bb, sp)
+    elif len(bb.successors_2) == 1:
+        bb_x: BasicBlock = bb.successors_2[0]
+        res = res + trace_path(bb_x, last_bb, cur_sp)
     else:
-        res: SimplePath = trace_path(func_cfg[dests[0]], func_cfg, last_bb)
-        res.prepend(bb)
+        print("Problem - trace path")
 
     return res
 
-
-@typechecked
-def mark_loops(func_cfg: dict[int, BasicBlock]) -> None:
-    """
-    TODO
-    """
-    addr: int
-    bb: BasicBlock
-    for addr, bb in func_cfg.items():
-        if bb.cft.goes_backwards(bb.end_address):
-            bb.is_loop = True
 
 
 
@@ -110,36 +116,18 @@ def generate_paths_of_function(func_name: str, func_cfg: dict[int, BasicBlock]):
     addr, first_bb = sorted(func_cfg.items())[0]
     addr2, last_bb = sorted(func_cfg.items())[-1]
 
-    # First mark loop entries
-    mark_loops(func_cfg)
-
     # When we have the first block it is time to trace
     # all the others
-    print("Trace path")
-    res: SimplePath = trace_path(first_bb, func_cfg, last_bb)
-    print(res)
+    logging.info("Trace path")
+    res: list[MetaPath] = trace_path(first_bb, last_bb, SimplePath())
+    print(f"\n\nRESULT OF PATH TRACING:")
+    for i, r in enumerate(res):
+        print(f"-------------------------- PATH {i} ------------------------------------------")
+        print(f"{r}")
+        print(f"----------------------------------------------------------------------------")
 
     
-    """
-    while was_extended:
-        was_extended = False
-        for sp in res:
-            if sp.get_last_bb().start_address != last_bb.start_address:
-                was_extended = True
-                new_start_1: Optional[BasicBlock] = sp.get_ends_with_loop()
-                new_start_2: Optional[BasicBlock] = sp.get_ends_with_path()
-                if (new_start_1 is not None) and (new_start_2 is not None):
-                    print("Something wrong. - generate_paths_of_function")
-                elif new_start_1 is not None:
-                    #tmp_res: list[SimplePath] = trace_loop(new_start_1, func_cfg, last_bb)
-                    #sp.assign_successor_list(tmp_res)
-                    pass
-                elif new_start_2 is not None:
-                    tmp_res: list[SimplePath] = trace_path(new_start_2, func_cfg, last_bb)
-                    sp.assign_successor_list(tmp_res)
-                else:
-                    print("Something wrong. - generate_paths_of_function")
-    """
+    
 
 
 
@@ -154,7 +142,7 @@ def generate_all_paths(all_cfgs: dict[str, dict[int, BasicBlock]]):
     func_name: str
     func_cfg: dict[int, BasicBlock]
     
-    analyze_loops(all_cfgs)
+    all_loops: dict[str, list[LoopPath]] = analyze_loops(all_cfgs)
     for func_name, func_cfg in all_cfgs.items():
         # trace_loop(func_name, func_cfg)
         generate_paths_of_function(func_name, func_cfg)

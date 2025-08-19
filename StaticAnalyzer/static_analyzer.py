@@ -449,7 +449,7 @@ def extract_cfg_of_function(symbol: lief.ELF.Symbol)\
             if trg_addr in basic_blocks:
                 bb.successors_2.append(basic_blocks[trg_addr])
             else:
-                bb.successors_2.append(None)
+                pass#bb.successors_2.append(None)
 
 
     return basic_blocks, adj
@@ -467,7 +467,7 @@ def extract_all_cfgs(function_symbols: list[lief.ELF.Symbol]) -> dict[str, dict[
 
     # Loop through function symbols
     for i, func_sym in enumerate(function_symbols):
-        print(f"\n--- Analyzing Function: {func_sym.name} @ 0x{func_sym.value:x} ---")
+        print(f"\n--------------------- Analyzing Function: {func_sym.name} @ 0x{func_sym.value:x} ---------------------")
         print(f"Attempting to disassemble 0x{get_function_size(func_sym):x}\
                bytes from 0x{get_function_start_address(func_sym):x}")
         basic_blocks: dict[int, BasicBlock]
@@ -478,7 +478,7 @@ def extract_all_cfgs(function_symbols: list[lief.ELF.Symbol]) -> dict[str, dict[
             print("No basic blocks generated for this function.")
             continue
 
-        print("Basic Blocks:")
+        print("\n+++++\nBASIC BLOCKS:")
         for bb_addr, bb in sorted(basic_blocks.items()):
             print(f"  {bb}")
             for insn_idx, insn in enumerate(bb.instructions):
@@ -486,6 +486,8 @@ def extract_all_cfgs(function_symbols: list[lief.ELF.Symbol]) -> dict[str, dict[
             print(f"    Successors: {[(hex(addr), desc) for addr, desc in adj.get(bb_addr, [])]}")
 
         print_adj(adj)
+        print(f"\n-------------------------------------------------------------")
+
 
         # Add it
         func_basic_blocks[func_sym.name] = basic_blocks
@@ -510,7 +512,7 @@ def print_adj(adj: dict[int, list[tuple[int, str]]]) -> None:
     """
     TODO
     """
-    print("Edges (Adjacency List):")
+    print("\n+++++\nEDGES (Adjacency List):")
     for from_bb, to_bbs in sorted(adj.items()):
         print(f"  From BB @ 0x{from_bb:x}:")
         for to_bb_addr, edge_type in to_bbs:

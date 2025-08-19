@@ -18,7 +18,7 @@ class MetaPath:
     """
     MetaPath will be just the holder of the SimplePath
     and LoopPath. It shouldn't be needed but because we have
-    some other way of handling loops there is a need for this.
+    some particular way of handling loops there is a need for this.
     """
 
     def __init__(self):
@@ -37,8 +37,21 @@ class MetaPath:
             self.prepend(e)
 
     def __repr__(self):
-        name: str = "MetaPath\n"
+        """name: str = "MetaPath\n"
         other: str = ""
         for e in self.path:
             other += str(e)
-        return name+other
+        return name+other"""
+        name = "MetaPath{\n"
+        indented_lines = []
+        
+        for e in self.path:
+            # Split each element's string representation into lines
+            for line in str(e).splitlines():
+                # Indent each line by 4 spaces
+                indented_lines.append("    " + line)
+            # Add an extra newline between elements if needed
+            indented_lines.append("")
+        
+        # Join all lines and remove any trailing whitespace
+        return name + "\n".join(indented_lines).rstrip() + "\n}"

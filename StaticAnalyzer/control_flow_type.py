@@ -91,12 +91,14 @@ class ControlFlowType:
         for d in dests:
             if d < bb_end_addr:
                 return True
+        return False
     
     def goes_forward(self, addr):
         dests = self.get_destinations()
         for d in dests:
             if d > addr:
                 return True
+        return False
         
     def get_backward_dest(self, bb_end_addr):
         # Should make better

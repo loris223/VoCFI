@@ -4,7 +4,7 @@ int main() {
     int n = 10;
     for(int i = 0; i < n; i++){
         res++;
-        if(i < (n - 5)){
+        if(i > (n - 5)){
             break;
         }
     }

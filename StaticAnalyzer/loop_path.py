@@ -130,6 +130,84 @@ class LoopPath:
             raise ValueError("The entry block is already used.")
         else:
             LoopPath.ENTRY_BLOCKS.append(bb)
+    
+    def __repr__(self):
+        # Header with ID
+        header = f"LoopPath(ID={self.id}, "
+        
+        # Entry block info
+        entry_info = "Entry: None"
+        if self.entry_bb:
+            entry_addr = f"0x{self.entry_bb.start_address:x}"
+            entry_info = f"Entry: {entry_addr}, "
+        
+        # Exit block info
+        exit_info = "Exit: None"
+        if self.exit_bb:
+            exit_addr = f"0x{self.exit_bb.start_address:x}"
+            exit_info = f"Exit: {exit_addr}, "
+        
+        # Continuation block info
+        cont_info = "Continuation: None"
+        if self.continuation_bb:
+            cont_addr = f"0x{self.continuation_bb.start_address:x}"
+            cont_info = f"Continuation: {cont_addr}, "
+        
+        # Backward jumps info
+        backward_info = ["    Backward jumps:"]
+        for i, bb in enumerate(self.backward_jump_bbs):
+            addr_range = f"0x{bb.start_address:x}-0x{bb.end_address:x}"
+            backward_info.append(f"        {i}: {addr_range}")
+        
+        # Forward jumps (break-like) info
+        forward_info = ["    Forward jumps (break-like):"]
+        for i, bb in enumerate(self.forward_outside_jump_bbs):
+            addr_range = f"0x{bb.start_address:x}-0x{bb.end_address:x}"
+            forward_info.append(f"        {i}: {addr_range}")
+        
+        # Loop blocks info
+        loop_blocks_info = ["    Loop blocks:"]
+        for i, bb in enumerate(self.loop_bbs):
+            addr_range = f"0x{bb.start_address:x}-0x{bb.end_address:x}"
+            loop_blocks_info.append(f"        {i}: {addr_range}")
+        
+        # Parent/child info
+        parent_info = f"    Parent: {self.parent.id if self.parent else 'None'}"
+        child_info = "    Children: None"
+        if self.childs:
+            child_ids = ", ".join(str(child.id) for child in self.childs)
+            child_info = f"    Children: [{child_ids}]"
+
+        # Path
+        indented_lines = []
+        
+        for e in self.path:
+            # Split each element's string representation into lines
+            for line in str(e).splitlines():
+                # Indent each line by 4 spaces
+                indented_lines.append("    " + line)
+            # Add an extra newline between elements if needed
+            indented_lines.append("")
+        
+        path_info = "    Path:\n" + "\n".join(indented_lines).rstrip() + "\n"
+
+        header = header + entry_info + exit_info + cont_info + "){"
+        
+        # Build the output
+        parts = [header]
+        
+        if len(self.backward_jump_bbs) > 0:
+            parts.extend(backward_info)
+        
+        if len(self.forward_outside_jump_bbs) > 0:
+            parts.extend(forward_info)
+        
+        if len(self.loop_bbs) > 0:
+            parts.extend(loop_blocks_info)
+        
+        parts.extend([parent_info, child_info, path_info])
+        
+        return "\n".join(parts) + "}"
         
 
 

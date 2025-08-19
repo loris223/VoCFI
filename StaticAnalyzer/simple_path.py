@@ -100,16 +100,20 @@ class SimplePath:
             blocks_info.append(f"{i}: {addr_range}")
         
         # Successors
+        """
         succ_info = "None"
         if self.successor_paths:
             succ_ids = ", ".join(str(sp.id) for sp in self.successor_paths)
             succ_info = f"[{succ_ids}]"
+        """
         
         # Link infos
+        """
         link_info = "None"
         if self.link_paths:
             link_ids = ", ".join(str(sp.id) for sp in self.link_paths)
             link_info = f"[{link_ids}]"
+        """
         
         # Build output with consistent 4-space indentation
         parts = [header]
@@ -122,9 +126,9 @@ class SimplePath:
             # Add extra 4-space indent for block lines
             parts.extend("        " + line for line in blocks_info)
         
-        parts.append(f"    Successors: {succ_info}")
+        # parts.append(f"    Successors: {succ_info}")
 
-        parts.append(f"    Links: {link_info}")
+        # parts.append(f"    Links: {link_info}")
         
         return "\n".join(parts) + "\n"
 

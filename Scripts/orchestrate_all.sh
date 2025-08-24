@@ -170,3 +170,18 @@ print_top_sign "$SPIKE_TEXT"
     exit 1
 }
 print_bottom_sign "$SPIKE_TEXT"
+
+
+# Validator
+VALIDATOR_PATH="$RISCV/VoCFI/Validator/validator.py"
+VALIDATOR_TEXT="VALIDATOR"
+print_top_sign "$VALIDATOR_TEXT"
+if [ -f "$VALIDATOR_PATH" ]; then
+    echo -e "${CYAN}Running validator.${NC}"
+    python3 "$VALIDATOR_PATH"
+else
+    echo -e "${RED}Error: validator.py not found!${NC}"
+    exit 1
+fi
+
+print_bottom_sign "$VALIDATOR_TEXT"

@@ -29,6 +29,7 @@ site are still compiled as a linking branch or are optimized
 by traditional inlining using the RISC-V compiler.
 """
 
+import os
 from typeguard import typechecked
 from basic_block import BasicBlock
 from control_flow_type import ControlFlowType
@@ -38,6 +39,7 @@ from typing import Optional
 from loop_handler import analyze_loops
 from loop_path import LoopPath
 from meta_path import MetaPath
+from analyzer_hashing import hash_meta_paths
 logging.basicConfig(level=logging.DEBUG)
 
 
@@ -104,7 +106,7 @@ def get_unextended_paths(sp: SimplePath) -> list[SimplePath]:
     pass
 
 @typechecked
-def generate_paths_of_function(func_name: str, func_cfg: dict[int, BasicBlock]):
+def generate_paths_of_function(func_name: str, func_cfg: dict[int, BasicBlock]) -> list[MetaPath]:
     """
     TODO
     """
@@ -122,13 +124,34 @@ def generate_paths_of_function(func_name: str, func_cfg: dict[int, BasicBlock]):
     res: list[MetaPath] = trace_path(first_bb, last_bb, SimplePath())
     print(f"\n\nRESULT OF PATH TRACING:")
     for i, r in enumerate(res):
+        hash_meta_paths(r)
         print(f"-------------------------- PATH {i} ------------------------------------------")
         print(f"{r}")
         print(f"----------------------------------------------------------------------------")
+    return res
 
     
     
-
+def write_results_to_file(all_loops: dict[str, list[LoopPath]], all_paths: list[list[MetaPath]]):
+    riscv_path = os.getenv('RISCV')
+    if riscv_path:
+        file_path = os.path.join(riscv_path, 'analyzer_output')
+        with open(file_path, 'w') as f:
+            f.write("LOOPS\n")
+            for name, loops in all_loops.items():
+                for l in loops:
+                    for h in l.hashes:
+                        f.write("0x" + str(h.hex()))
+                        f.write("\n")
+            f.write("PATHS\n")
+            for l1 in all_paths:
+                for l2 in l1:
+                    f.write("0x" + str(l2.hash_bytes.hex()))
+                    f.write("\n")
+        
+        print(f"File created at: {file_path}")
+    else:
+        print("RISCV environment variable is not set")
 
 
 
@@ -143,7 +166,12 @@ def generate_all_paths(all_cfgs: dict[str, dict[int, BasicBlock]]):
     func_cfg: dict[int, BasicBlock]
     
     all_loops: dict[str, list[LoopPath]] = analyze_loops(all_cfgs)
+
+    all_paths: list[list[MetaPath]] = []
     for func_name, func_cfg in all_cfgs.items():
         # trace_loop(func_name, func_cfg)
-        generate_paths_of_function(func_name, func_cfg)
+        all_paths += [generate_paths_of_function(func_name, func_cfg)]
+    
+    
+    write_results_to_file(all_loops, all_paths)
 

@@ -5,6 +5,7 @@ TODO
 from typeguard import typechecked
 from basic_block import BasicBlock
 from typing import Optional
+#from analyzer_hashing import hash_branch_addrs
 #from loop_path import LoopPath
 import typing
 if typing.TYPE_CHECKING:
@@ -23,7 +24,7 @@ class SimplePath:
     CURR_ID: int = 0
     SIMPLE_PATHS: list['SimplePath'] = []
 
-    def __init__(self):
+    def __init__(self, inside_loop: bool = False):
         self.id: int = SimplePath.get_id()
         self.path: list[BasicBlock] = []
         self.ends_with_loop: bool = False
@@ -37,6 +38,9 @@ class SimplePath:
         self.extension_path: Optional[LoopPath] = None
         self.loop_end: bool = False
         self.function_end: bool = False
+        self.inside_loop = inside_loop
+        self.hash_bytes: typing.Optional[bytes] = None
+        self.hashed_sequence: list[tuple[int, int]] = []
     
     def append(self, bb: BasicBlock):
         self.path.append(bb)
@@ -73,6 +77,37 @@ class SimplePath:
     def assign_successor_list(self, sps: list['SimplePath']) -> None:
         self.successor_paths = sps
 
+    """def get_hash(self, current_hash: bytes = None, previous_src_addr: int = -1) -> bytes:
+        if current_hash == None:
+            current_hash = bytes(32)
+
+        # It is hard to see now what is going on so we will 
+        # first accumulate all jumps to be hashed and then 
+        # print them and hash them
+
+        if previous_src_addr != -1:
+            print(f"Previous hash: 0x{current_hash.hex()}")
+            print(f"Hashing: 0x{previous_src_addr:x} -> 0x{self.path[0].start_address:x}")
+            current_hash = hash_branch_addrs(current_hash, previous_src_addr, self.path[0].start_address)
+
+        print(f"Inside loop: {self.inside_loop}")
+        if self.inside_loop:
+            print(f"Previous hash: 0x{current_hash.hex()}")
+            print(f"Hashing: 0x{self.path[-1].end_address-3:x} -> 0x{self.path[0].start_address:x}")
+            current_hash = hash_branch_addrs(current_hash, self.path[-1].end_address-3, self.path[0].start_address)
+
+        for i in range(len(self.path)-1):
+            if self.path[i].cft.insn_type == 4:
+                #print(f"{self.path[i-1].cft.insn_type}, {self.path[i].cft.insn_type}")
+                continue
+            print(f"Previous hash: 0x{current_hash.hex()}")
+            print(f"Hashing: 0x{self.path[i].end_address-3:x} -> 0x{self.path[i+1].start_address:x}")
+            current_hash = hash_branch_addrs(current_hash, self.path[i].end_address-3, self.path[i+1].start_address)
+        
+
+
+        return current_hash
+"""
     def __repr__(self):
         # Calculate start and end addresses
         start_addr = f"0x{self.path[0].start_address:x}" if self.path else "None"
@@ -129,8 +164,13 @@ class SimplePath:
         # parts.append(f"    Successors: {succ_info}")
 
         # parts.append(f"    Links: {link_info}")
+
+        hs: str = "{"
+        for h in self.hashed_sequence:
+            hs += f"(0x{h[0]:x}, 0x{h[1]:x}),"
+        hs += "}"
         
-        return "\n".join(parts) + "\n"
+        return "\n".join(parts) + "\n" + hs
 
     
     @staticmethod

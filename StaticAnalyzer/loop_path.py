@@ -90,6 +90,9 @@ class LoopPath:
         # There should be list of paths that the loop can take
         self.path: list[Optional['MetaPath']] = None
 
+        self.hashed_sequence: list[tuple[int, int]] = []
+        self.hashes: list[bytes] = []
+
     
     def set_entry_bb(self, bb: BasicBlock) -> None:
         self.entry_bb = bb
@@ -178,6 +181,16 @@ class LoopPath:
             child_ids = ", ".join(str(child.id) for child in self.childs)
             child_info = f"    Children: [{child_ids}]"
 
+        loop_hashes_sequence_info = ["    Hash sequence start options:"]
+        for i, t in enumerate(self.hashed_sequence):
+            addr_range = f"0x{t[0]:x} ----> 0x{t[1]:x}"
+            loop_hashes_sequence_info.append(f"        {i}: {addr_range}")
+
+        loop_hashes_info = ["    Hashes:"]
+        for i, h in enumerate(self.hashes):
+            hash_value =  f" 0x{h.hex()}"
+            loop_hashes_info.append(f"        {i}: {hash_value}")
+
         # Path
         indented_lines = []
         
@@ -205,9 +218,20 @@ class LoopPath:
         if len(self.loop_bbs) > 0:
             parts.extend(loop_blocks_info)
         
-        parts.extend([parent_info, child_info, path_info])
+        if len(self.hashed_sequence) > 0:
+            parts.extend(loop_hashes_sequence_info)
+
+        if len(self.hashes) > 0:
+            parts.extend(loop_hashes_info)
         
-        return "\n".join(parts) + "}"
+        parts.extend([parent_info, child_info, path_info])
+
+        hs: str = "{"
+        for h in self.hashed_sequence:
+            hs += f"(0x{h[0]:x}, 0x{h[1]:x}),"
+        hs += "}"
+        
+        return "\n".join(parts) + "}" #+ hs
         
 
 

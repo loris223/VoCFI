@@ -23,6 +23,7 @@ class MetaPath:
 
     def __init__(self):
         self.path: list[typing.Union[SimplePath, 'LoopPath']] = []
+        self.hash_bytes: typing.Optional[bytes] = None
 
     def append(self, path: typing.Union[SimplePath, 'LoopPath']) -> None:
         self.path.append(path)
@@ -35,6 +36,20 @@ class MetaPath:
         tmp.reverse()
         for e in tmp:
             self.prepend(e)
+    """        
+    def get_hash(self) -> bytes:
+        current_hash: bytes = bytes(32)
+        previous_obj: typing.Union[SimplePath, 'LoopPath'] = SimplePath()
+        for p in self.path:
+            if isinstance(p, SimplePath) and isinstance(previous_obj, LoopPath):
+                current_hash = p.get_hash(current_hash, previous_src_addr=previous_obj.loop_bbs[-1].end_address-3)
+            elif isinstance(p, SimplePath):
+                current_hash = p.get_hash(current_hash)
+            previous_obj = p
+            
+        return current_hash
+    """
+
 
     def __repr__(self):
         """name: str = "MetaPath\n"
@@ -54,4 +69,7 @@ class MetaPath:
             indented_lines.append("")
         
         # Join all lines and remove any trailing whitespace
-        return name + "\n".join(indented_lines).rstrip() + "\n}"
+        if self.hash_bytes is not None:
+            return name + "\n".join(indented_lines).rstrip() + "\n}" + f"Hash: 0x{self.hash_bytes.hex()}"
+        else:
+            return name + "\n".join(indented_lines).rstrip() + "\n}" #+ f"Hash: 0x{self.get_hash().hex()}"

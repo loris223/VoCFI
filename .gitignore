@@ -1,7 +1,10 @@
-# Ignore everything in folder SamplePrograms
-SamplePrograms/*/
+# Ignore everything INSIDE each subdirectory of SamplePrograms
+SamplePrograms/*/*
 
-# Allow for main files
+# But do NOT ignore the subdirectories themselves, so we can un-ignore files inside them
+!SamplePrograms/*/
+
+# Now, allow for the main files
 !SamplePrograms/*/main.c
 !SamplePrograms/*/main.cpp
 

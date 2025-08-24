@@ -9,6 +9,7 @@ from basic_block import BasicBlock
 from loop_path import LoopPath
 from simple_path import SimplePath
 from meta_path import MetaPath
+from analyzer_hashing import hash_loops
 import copy
 import logging
 
@@ -134,7 +135,7 @@ def trace_loop_path(bb: BasicBlock, last_bbs: list[BasicBlock], current_loop: Lo
         res: list[MetaPath] = []
         for d in next_loop.forward_outside_jump_bbs:
             # print(f"Next {d}")
-            res = res + trace_loop_path(d, last_bbs, current_loop, loops, entry_bbs, SimplePath())
+            res = res + trace_loop_path(d, last_bbs, current_loop, loops, entry_bbs, SimplePath(inside_loop=True))
             
         
         for r in res:
@@ -142,11 +143,35 @@ def trace_loop_path(bb: BasicBlock, last_bbs: list[BasicBlock], current_loop: Lo
         return res
     
     # End condition
-    if bb in last_bbs:
-        cur_sp.append(bb)
+    if bb == current_loop.continuation_bb \
+        or bb.start_address >= current_loop.continuation_bb.start_address:
+        # cur_sp.append(bb)
         mp: MetaPath = MetaPath()
         mp.append(cur_sp)
         return [mp]
+
+    # End condition
+    
+    if bb in last_bbs:
+        res: list[MetaPath] = []
+        mp: MetaPath = MetaPath()
+        cur_sp.append(bb)
+        mp.append(cur_sp)
+        res += [mp]
+        if bb == current_loop.loop_bbs[-1]:
+            return res
+        if len(bb.successors_2) <= 1:
+            print("Can not happen! Should not happen?")
+        bb_x1: BasicBlock = bb.successors_2[0]
+        bb_x2: BasicBlock = bb.successors_2[1]
+        sp: SimplePath = SimplePath(inside_loop=True)
+        sp.path = cur_sp.path.copy()
+        if bb_x1 in entry_bbs:
+            res += trace_loop_path(bb_x2, last_bbs, current_loop, loops, entry_bbs, sp)
+        elif bb_x2 in entry_bbs:
+            res += trace_loop_path(bb_x1, last_bbs, current_loop, loops, entry_bbs, sp)
+
+        return res
     
     cur_sp.append(bb)
 
@@ -155,7 +180,7 @@ def trace_loop_path(bb: BasicBlock, last_bbs: list[BasicBlock], current_loop: Lo
         bb_x1: BasicBlock = bb.successors_2[0]
         bb_x2: BasicBlock = bb.successors_2[1]
         # Create new simple path object and copy its contents
-        sp: SimplePath = SimplePath()
+        sp: SimplePath = SimplePath(inside_loop=True)
         sp.path = cur_sp.path.copy()
 
         res = res + trace_loop_path(bb_x1, last_bbs, current_loop, loops, entry_bbs, cur_sp)
@@ -193,6 +218,8 @@ def determine_all_loop_blocks(bb: BasicBlock, loop: LoopPath, entry_bbs: list[Ba
     This does not work if the nested loop has not been resolved, maybe can work
     by the pure luck or compiler design but it is not ok. 
     """
+    #print("Start")
+    #print(bb)
 
     # We have three conditions that can stop recursion
     # 1. There is a nested loop
@@ -222,7 +249,7 @@ def determine_all_loop_blocks(bb: BasicBlock, loop: LoopPath, entry_bbs: list[Ba
 
         return res
     
-    print(f"Continuation node:  {loop.continuation_bb}")
+    #print(f"Continuation node:  {loop.continuation_bb}")
     # Ugly solution this last condition
     # But so is compiler that does that nop instruction which is
     # reached after the loop break is executed
@@ -239,8 +266,8 @@ def determine_all_loop_blocks(bb: BasicBlock, loop: LoopPath, entry_bbs: list[Ba
     visited.append(bb)
 
     # Go through all successors of the block
-    print(f"BB: {bb}")
-    print(f"BB suc: {bb.successors_2}")
+    #print(f"BB: {bb}")
+    #print(f"BB suc: {bb.successors_2}")
     for suc in bb.successors_2:
         #print(f"suc: {suc}")
         res = res + determine_all_loop_blocks(suc, loop, entry_bbs, loops, visited)
@@ -381,8 +408,9 @@ def analyze_loops_function(cfg: dict[int, BasicBlock]) -> list[LoopPath]:
         last_bbs: list[BasicBlock] = l.backward_jump_bbs.copy()
         # There shouldn't be a need for continuation block to be in there but just to be on the safe side.
         last_bbs.append(l.continuation_bb)
-        res: list[MetaPath] = trace_loop_path(l.entry_bb, last_bbs, l, loops, entry_bbs, SimplePath())
+        res: list[MetaPath] = trace_loop_path(l.entry_bb, last_bbs, l, loops, entry_bbs, SimplePath(inside_loop=True))
         l.path = res
+        hash_loops(l)
         print(f"-------------------------- Loop {i} ------------------------------------------")
         print(f"{l}")
         print(f"----------------------------------------------------------------------------")

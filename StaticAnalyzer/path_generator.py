@@ -130,6 +130,18 @@ def generate_paths_of_function(func_name: str, func_cfg: dict[int, BasicBlock]) 
         print(f"----------------------------------------------------------------------------")
     return res
 
+
+def get_entry_hashes(loop_id: int, all_paths: list[list[MetaPath]]):
+    res = []
+    for func_paths in all_paths:
+        for m_path in func_paths:
+            for i, el in enumerate(m_path.path):
+                if el.id == loop_id:
+                    if(i > 0):
+                        #print(f"TODO: 0x{m_path.path[i-1].hash_bytes.hex()}")
+                        res.append(m_path.path[i-1].hash_bytes)
+    return res
+    
     
     
 def write_results_to_file(all_loops: dict[str, list[LoopPath]], all_paths: list[list[MetaPath]]):
@@ -140,14 +152,26 @@ def write_results_to_file(all_loops: dict[str, list[LoopPath]], all_paths: list[
             f.write("LOOPS\n")
             for name, loops in all_loops.items():
                 for l in loops:
+                    f.write("LOOP\n")
+                    f.write("ENTRIES\n")
+                    entry_hashes = get_entry_hashes(l.id, all_paths)
+                    for h in entry_hashes:
+                        f.write("0x" + str(h.hex()))
+                        f.write("\n")
+                    if len(entry_hashes) == 0:
+                        f.write("0x" + '0' * 64)
+                        f.write("\n")
+                    f.write("PATHS\n")
                     for h in l.hashes:
                         f.write("0x" + str(h.hex()))
                         f.write("\n")
-            f.write("PATHS\n")
+                    f.write("\n")
+            f.write("MAIN PATHS\n")
             for l1 in all_paths:
                 for l2 in l1:
-                    f.write("0x" + str(l2.hash_bytes.hex()))
-                    f.write("\n")
+                    for h in l2.hashes:
+                        f.write("0x" + str(h.hex()))
+                        f.write("\n")
         
         print(f"File created at: {file_path}")
     else:

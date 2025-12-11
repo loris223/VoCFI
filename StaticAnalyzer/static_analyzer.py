@@ -15,6 +15,7 @@ GENERIC_ERROR_CODE: int = 1
 header_file_type: int = 0
 functions_to_analyze: list[str] = []
 functions_to_analyze.append("main")
+#functions_to_analyze.append("fun_read")
 args = None
 
 
@@ -668,6 +669,7 @@ def analyze_elf(filepath: str, all_functions: bool = True, section_name: str = "
 
     # With binary and function symbols get all cfgs by function
     all_cfgs: dict[str, dict[int, BasicBlock]] = extract_all_cfgs(function_symbols)
+    print(all_cfgs)
     return all_cfgs
 
 

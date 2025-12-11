@@ -163,6 +163,8 @@ print_bottom_sign "$EXTRACTION_TEXT"
 # Spike run script
 SPIKE_SCRIPT_PATH="$RISCV/VoCFI/Scripts/spike_run_script.sh"
 SPIKE_TEXT="SPIKE"
+PREVIOUS_PWD=$(pwd)
+cd $(dirname "$COMPILED_BIN")
 print_top_sign "$SPIKE_TEXT"
 #echo -e "${BLUE}=== Running with Spike ===${NC}" >&2
 "$SPIKE_SCRIPT_PATH" "$COMPILED_BIN" || {
@@ -170,6 +172,7 @@ print_top_sign "$SPIKE_TEXT"
     exit 1
 }
 print_bottom_sign "$SPIKE_TEXT"
+cd $PREVIOUS_PWD
 
 
 # Validator

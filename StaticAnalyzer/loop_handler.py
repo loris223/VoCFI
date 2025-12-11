@@ -206,6 +206,9 @@ def determine_forward_outside_jumps(loop: LoopPath) -> None:
         for bb_x in bb.successors_2:
             if bb_x.start_address > loop.exit_bb.end_address:
                 loop.forward_outside_jump_bbs.append(bb_x)
+                loop.forward_outside_jump_bbs_2.append(bb)
+    
+    loop.forward_outside_jump_bbs_2 = list(set(loop.forward_outside_jump_bbs_2))
 
     
 @typechecked
@@ -272,7 +275,7 @@ def determine_all_loop_blocks(bb: BasicBlock, loop: LoopPath, entry_bbs: list[Ba
         #print(f"suc: {suc}")
         res = res + determine_all_loop_blocks(suc, loop, entry_bbs, loops, visited)
         #print(f"res: {res}")
-    print(f"res: {res}")
+    #print(f"res: {res}")
     return res
 
 

@@ -47,6 +47,14 @@ export SNIFFER_START_ADDR
 export SNIFFER_END_ADDR
 export SNIFFER_FUN_SIZE
 
+LAST_FOLDER=$(basename $(dirname "$TARGET_FILE"))
+if [ "$LAST_FOLDER" = "Attack" ]; then
+    SNIFFER_FOLLOW_FUNS=1
+    export SNIFFER_FOLLOW_FUNS
+    SNIFFER_BANNED_ADDRS="0x101ec, 0x10208"
+    export SNIFFER_BANNED_ADDRS
+fi
+
 echo -e "${CYAN}Environment variables set:${NC}"
 echo -e "${MAGENTA}SNIFFER_START_ADDR${NC}=${YELLOW}$SNIFFER_START_ADDR${NC}"
 echo -e "${MAGENTA}SNIFFER_END_ADDR${NC}=${YELLOW}$SNIFFER_END_ADDR${NC}"

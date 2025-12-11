@@ -80,6 +80,7 @@ class LoopPath:
 
         # break statements and other conditions
         self.forward_outside_jump_bbs: list[BasicBlock] = []
+        self.forward_outside_jump_bbs_2: list[BasicBlock] = []
         self.forward_outside_jump_bbs_determined: bool = False
 
         # Parent
@@ -164,7 +165,7 @@ class LoopPath:
         
         # Forward jumps (break-like) info
         forward_info = ["    Forward jumps (break-like):"]
-        for i, bb in enumerate(self.forward_outside_jump_bbs):
+        for i, bb in enumerate(self.forward_outside_jump_bbs_2):
             addr_range = f"0x{bb.start_address:x}-0x{bb.end_address:x}"
             forward_info.append(f"        {i}: {addr_range}")
         

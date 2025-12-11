@@ -55,27 +55,41 @@ def hash_simple_paths(sp: SimplePath, current_hash: bytes = None) -> bytes:
     return current_hash
 
 @typechecked
-def hash_meta_paths(mp: MetaPath, current_hash: typing.Optional[bytes] = None) -> bytes:
+def hash_meta_paths(mp: MetaPath, current_hash: typing.Optional[bytes] = None) -> list[bytes]:
     if current_hash is None:
         current_hash = bytes(hash_size)
 
+    #if len(mp.hashes) > 0:
+    #    return mp.hashes
+
     
     previous_obj: typing.Optional[typing.Union[SimplePath, 'LoopPath']] = None
+    possible_hashes: list[bytes] = [current_hash]
     for p in mp.path:
         if isinstance(p, SimplePath) and isinstance(previous_obj, LoopPath):
-            loop_exit_addr: int = previous_obj.loop_bbs[-1].end_address-3
+            loop_exit_addrs: list[int] = [(b.end_address - 3) for b in previous_obj.forward_outside_jump_bbs_2]
+            #loop_exit_addr: int = previous_obj.loop_bbs[-1].end_address-3
             sp_entry_addr: int = p.path[0].start_address
-            p.hashed_sequence += [(loop_exit_addr, sp_entry_addr)]
-            current_hash = hash_branch_addrs(current_hash, loop_exit_addr, sp_entry_addr)
+            p.hashed_sequence += [(loop_exit_addrs[0], sp_entry_addr)] # The list should fork!!
+            new_possible_hashes: list[bytes] = []
+            for c_h in possible_hashes:
+                for addr in loop_exit_addrs:
+                    new_possible_hashes.append(hash_branch_addrs(c_h, addr, sp_entry_addr))
+            possible_hashes = new_possible_hashes
 
         if isinstance(p, SimplePath):
-            current_hash = hash_simple_paths(p, current_hash)
+            new_possible_hashes: list[bytes] = []
+            for c_h in possible_hashes:
+                new_possible_hashes.append(hash_simple_paths(p, c_h))
+            possible_hashes = new_possible_hashes
         
         if isinstance(p, LoopPath):
             hash_loops(p)
         previous_obj = p
     mp.hash_bytes = current_hash
-    return current_hash
+    mp.hash_bytes = possible_hashes[0]
+    mp.hashes += possible_hashes
+    return possible_hashes
 
 
 @typechecked
@@ -98,8 +112,8 @@ def hash_loops(loop: LoopPath,current_hash: typing.Optional[bytes] = None):
     for pe in possible_entries:
         current_hash = pe
         for p in loop.path:
-            new_hash = hash_meta_paths(p, current_hash)
-            loop.hashes.append(new_hash)
+            new_hashes = hash_meta_paths(p, current_hash)
+            loop.hashes += new_hashes
         
 
 

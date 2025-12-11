@@ -24,6 +24,7 @@ class MetaPath:
     def __init__(self):
         self.path: list[typing.Union[SimplePath, 'LoopPath']] = []
         self.hash_bytes: typing.Optional[bytes] = None
+        self.hashes: list[bytes] = []
 
     def append(self, path: typing.Union[SimplePath, 'LoopPath']) -> None:
         self.path.append(path)
@@ -68,8 +69,12 @@ class MetaPath:
             # Add an extra newline between elements if needed
             indented_lines.append("")
         
+        for h in self.hashes:
+            indented_lines.append("    " + f"0x{h.hex()}\n")
+        
+        
         # Join all lines and remove any trailing whitespace
         if self.hash_bytes is not None:
-            return name + "\n".join(indented_lines).rstrip() + "\n}" + f"Hash: 0x{self.hash_bytes.hex()}"
+            return name + "\n".join(indented_lines).rstrip() + "\n}"
         else:
             return name + "\n".join(indented_lines).rstrip() + "\n}" #+ f"Hash: 0x{self.get_hash().hex()}"

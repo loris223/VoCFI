@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "debugpy",
+      "request": "launch",
+      "name": "Launch Static Analyzer",
+      "program": "${workspaceFolder}/StaticAnalyzer/static_analyzer.py",
+      "args": [
+        "${input:objectFilePath}"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "objectFilePath",
+      "type": "pickString",
+      "description": "Select the object file to analyze",
+      "options": [
+        "SamplePrograms/HelloWorld/hello.o",
+        "StaticAnalyzer/hello.o",
+        "StaticAnalyzer/hello"
+      ]
+    }
+  ]
+}

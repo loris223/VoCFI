@@ -1,8 +1,8 @@
 Verification of Control Flow Integrity
 
-This project will be done in two parts. 
- -First part is Sniffer which is located in SPIKE source folder. It is a modification of SPIKE which we will use to track control flow of the program execution. 
- - Second part will be done in this folder. For now we will separate two modules. The first one being Attester. This Attester will be main entry point of the project. It is now considered best to be just bash script but that can change along the way. Second module will be static analyzer which will be mainly used to generate CFG of the provided program.
+This project is done in two parts. 
+ -First part is Sniffer which is located in SPIKE source folder. It is a modification of SPIKE which we use to track control flow of the program execution. 
+ - Second part is done in this repo. For now we will separate two modules. The first one being Attester. This Attester will be main entry point of the project. It is now considered best to be just bash script but that can change along the way. Second module will be static analyzer which will be mainly used to generate CFG of the provided program.
  
  
   The purpose of the Attester will be in the following:

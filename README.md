@@ -3,16 +3,16 @@
 **VoCFI** (Verification of Control Flow Integrity) is a system designed to detect control-flow hijacking attacks, such as Return-Oriented Programming (ROP), by cryptographically attesting the execution path of a program. The project combines a statically computed Control-Flow Graph (CFG) with runtime path attestation using a modified Spike RISC-V simulator.
 
 ## 📋 Table of Contents
-- [Overview](#overview)
-- [Architecture](#🏗️-architecture)
-- [Project Structure](#📁-project-structure)
-- [Prerequisites](#⚙️-prerequisites)
-- [Installation & Setup](#🔧-installation--setup)
-- [Usage](#🚀-usage)
-- [Sample Programs](#📊-sample-programs)
-- [Components](#🧩-components)
-- [Results & Validation](#✅-results--validation)
-- [Related Work](#📚-related-work)
+- [Overview](#-overview)
+- [Architecture](#%EF%B8%8F-architecture)
+- [Project Structure](#-project-structure)
+- [Prerequisites](#%EF%B8%8F-prerequisites)
+- [Installation & Setup](#-installation--setup)
+- [Usage](#-usage)
+- [Sample Programs](#-sample-programs)
+- [Components](#-components)
+- [Results & Validation](#-results--validation)
+- [Related Work](#-related-work)
 
 ## 📖 Overview
 

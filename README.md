@@ -4,15 +4,15 @@
 
 ## 📋 Table of Contents
 - [Overview](#overview)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Installation & Setup](#installation--setup)
-- [Usage](#usage)
-- [Sample Programs](#sample-programs)
-- [Components](#components)
-- [Results & Validation](#results--validation)
-- [Related Work](#related-work)
+- [Architecture](#🏗️-architecture)
+- [Project Structure](#📁-project-structure)
+- [Prerequisites](#⚙️-prerequisites)
+- [Installation & Setup](#🔧-installation--setup)
+- [Usage](#🚀-usage)
+- [Sample Programs](#📊-sample-programs)
+- [Components](#🧩-components)
+- [Results & Validation](#✅-results--validation)
+- [Related Work](#📚-related-work)
 
 ## 📖 Overview
 
@@ -21,6 +21,7 @@ VoCFI operates in three phases to ensure program execution integrity:
 1.  **Static Analysis Phase**: Analyzes a program's RISC-V ELF binary to construct a Control-Flow Graph (CFG) and calculate cryptographic hashes for all possible valid execution paths.
 2.  **Runtime Attestation Phase**: Uses a modified Spike simulator (`sniffer` module) to execute the program while monitoring all control-flow transfers and generating a real-time hash of the taken path.
 3.  **Verification Phase**: Compares the runtime attestation hash against the set of statically computed valid hashes. A mismatch indicates a control-flow integrity violation.
+
 
 ## 🏗️ Architecture
 
